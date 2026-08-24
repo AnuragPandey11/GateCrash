@@ -1,0 +1,39 @@
+package com.gatecrash.user;
+
+import com.gatecrash.township.Flat;
+import com.gatecrash.user.dto.UserDtos.SalesAgentResponse;
+import com.gatecrash.user.dto.UserDtos.UserResponse;
+import org.springframework.stereotype.Component;
+
+/**
+ * Entity to DTO translation.
+ *
+ * <p>Written by hand rather than generated: these mappings are few, and every one of them is a place
+ * where {@code passwordHash} or {@code tokenVersion} could accidentally escape over HTTP. Being able
+ * to read exactly which fields cross the boundary is worth more here than the saved keystrokes.
+ */
+@Component
+public class UserMapper {
+
+    public UserResponse toResponse(AppUser user) {
+        Flat flat = user.getFlat();
+        return new UserResponse(
+                user.getId(),
+                user.getLoginId(),
+                user.getFullName(),
+                user.getRole(),
+                user.getPhone(),
+                user.getEmail(),
+                user.isActive(),
+                user.isMustResetPassword(),
+                user.isOnDuty(),
+                flat == null ? null : flat.getId(),
+                flat == null ? null : flat.getNumber(),
+                flat == null ? null : flat.getBlock().getName(),
+                user.getCreatedAt());
+    }
+
+    public SalesAgentResponse toSalesAgent(AppUser user) {
+        return new SalesAgentResponse(user.getId(), user.getFullName(), user.getLoginId());
+    }
+}

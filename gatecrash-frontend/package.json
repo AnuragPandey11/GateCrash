@@ -1,0 +1,23 @@
+{
+  "name": "gatecrash-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GateCrash Township ERP \u2014 frontend workspaces (Admin Web + shared contract/realtime/core packages)",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @gatecrash/admin dev",
+    "dev:admin": "pnpm --filter @gatecrash/admin dev",
+    "build:admin": "pnpm --filter @gatecrash/admin build",
+    "preview:admin": "pnpm --filter @gatecrash/admin preview",
+    "gen:api": "bash tools/openapi/gen.sh",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

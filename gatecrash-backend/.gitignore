@@ -1,0 +1,19 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+*.log
+.DS_Store
+
+# Secrets -- never commit
+.env
+src/main/resources/firebase/service-account.json
+**/*service-account*.json

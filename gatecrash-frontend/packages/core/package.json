@@ -1,0 +1,29 @@
+{
+  "name": "@gatecrash/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain vocabulary shared by every surface: enums, the visit FSM, status metadata, formatters, i18n resources.",
+  "exports": {
+    ".": { "types": "./src/index.ts", "default": "./src/index.ts" },
+    "./i18n/en": { "types": "./src/i18n/en.ts", "default": "./src/i18n/en.ts" }
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "date-fns": "4.1.0"
+  },
+  "devDependencies": {
+    "@gatecrash/config": "workspace:*",
+    "@eslint/js": "9.14.0",
+    "eslint": "9.14.0",
+    "typescript-eslint": "8.13.0",
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
+  }
+}

@@ -1,0 +1,39 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    # Each test class shares one database; the schema is rebuilt from V1 on first context start.
+    clean-disabled: false
+
+app:
+  jwt:
+    # 32+ bytes, test-only. StartupSecretsValidator only warns under the test profile.
+    secret: test-secret-key-for-integration-tests-only-32bytes
+    issuer: gatecrash-test
+    access-ttl-min: 30
+    refresh-ttl-days: 30
+  firebase:
+    enabled: false          # FCM is never contacted from tests
+  pass:
+    pin-pepper: test-pin-pepper-value-at-least-16-bytes
+  security:
+    cors:
+      allowed-origins: http://localhost:3000
+    login:
+      max-attempts: 5
+      lockout-minutes: 15
+    redeem:
+      max-attempts: 10
+      window-minutes: 1
+  bootstrap:
+    admin-login-id: admin
+    admin-password: BootstrapAdmin#2026
+
+logging:
+  level:
+    root: WARN
+    com.gatecrash: INFO
+    org.flywaydb: INFO

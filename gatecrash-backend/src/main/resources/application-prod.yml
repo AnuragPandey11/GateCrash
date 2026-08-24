@@ -1,0 +1,24 @@
+spring:
+  jpa:
+    show-sql: false
+
+server:
+  # Behind a TLS-terminating load balancer. Cookies are not used (bearer tokens only), but the
+  # forwarded headers must be honoured so redirect/absolute URLs and client IPs stay correct.
+  forward-headers-strategy: framework
+
+app:
+  firebase:
+    enabled: ${FIREBASE_ENABLED:true}
+
+# API docs are not published in production. Enable deliberately behind an internal route if needed.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.gatecrash: INFO

@@ -1,0 +1,74 @@
+/*
+ * GateCrash design tokens — FRONTEND.md §10.1.
+ *
+ * Semantic names only. A component never reaches for `blue-500`; it asks for `primary`.
+ * Values are raw HSL channels so Tailwind can apply `<alpha-value>` (`bg-primary/10` works).
+ *
+ * NativeWind on mobile consumes the same token *names* via the shared Tailwind preset, which is
+ * what makes "the design system is genuinely shared" true rather than aspirational.
+ */
+
+:root {
+  /* Neutrals */
+  --gc-bg: 210 20% 98%;
+  --gc-surface: 0 0% 100%;
+  --gc-surface-raised: 210 20% 96%;
+  --gc-border: 214 20% 88%;
+
+  /* Foreground */
+  --gc-text: 222 25% 12%;
+  --gc-text-muted: 215 14% 42%;
+  --gc-text-inverse: 0 0% 100%;
+
+  /* Brand action */
+  --gc-primary: 221 78% 46%;
+  --gc-primary-fg: 0 0% 100%;
+
+  /* Status. `pending` is deliberately distinct from `warning`:
+     pending is *waiting*, expired is *failed*. §10.1. */
+  --gc-success: 152 62% 33%;
+  --gc-success-fg: 0 0% 100%;
+  --gc-danger: 0 72% 45%;
+  --gc-danger-fg: 0 0% 100%;
+  --gc-warning: 33 92% 42%;
+  --gc-warning-fg: 0 0% 100%;
+  --gc-info: 199 84% 38%;
+  --gc-info-fg: 0 0% 100%;
+  --gc-pending: 262 62% 52%;
+  --gc-pending-fg: 0 0% 100%;
+
+  /* Focus ring */
+  --gc-ring: 221 78% 46%;
+
+  /* Radii — sm 6 / md 10 / lg 16 / full */
+  --gc-radius-sm: 6px;
+  --gc-radius-md: 10px;
+  --gc-radius-lg: 16px;
+}
+
+.dark {
+  --gc-bg: 222 30% 8%;
+  --gc-surface: 222 26% 11%;
+  --gc-surface-raised: 222 22% 16%;
+  --gc-border: 220 16% 24%;
+
+  --gc-text: 210 30% 96%;
+  --gc-text-muted: 215 16% 65%;
+  --gc-text-inverse: 222 30% 8%;
+
+  --gc-primary: 217 90% 62%;
+  --gc-primary-fg: 222 40% 10%;
+
+  --gc-success: 152 55% 45%;
+  --gc-success-fg: 222 40% 8%;
+  --gc-danger: 0 72% 60%;
+  --gc-danger-fg: 222 40% 8%;
+  --gc-warning: 38 92% 55%;
+  --gc-warning-fg: 222 40% 8%;
+  --gc-info: 199 84% 55%;
+  --gc-info-fg: 222 40% 8%;
+  --gc-pending: 262 72% 68%;
+  --gc-pending-fg: 222 40% 8%;
+
+  --gc-ring: 217 90% 62%;
+}

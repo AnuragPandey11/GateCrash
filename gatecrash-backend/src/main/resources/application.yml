@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: gatecrash-backend
+  profiles:
+    default: local
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/gatecrash}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:admin}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: 5
+      connection-timeout: 30000
+      leak-detection-threshold: 60000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+        query:
+          in_clause_parameter_padding: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+  mvc:
+    problemdetails:
+      enabled: false
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Never leak stack traces or internal messages through the container's error page.
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+  forward-headers-strategy: framework
+  tomcat:
+    max-http-form-post-size: 256KB
+  max-http-request-header-size: 16KB
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
+
+app:
+  jwt:
+    # MUST be overridden in every non-local environment. Minimum 32 bytes; validated at startup.
+    secret: ${JWT_SECRET:change-me-32-bytes-min-in-prod-please}
+    issuer: gatecrash
+    access-ttl-min: ${JWT_ACCESS_TTL_MIN:30}
+    refresh-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
+  firebase:
+    enabled: ${FIREBASE_ENABLED:false}
+    credentials: ${FIREBASE_CREDENTIALS:classpath:firebase/service-account.json}
+  visit:
+    pending-ttl-minutes: ${VISIT_PENDING_TTL_MIN:10}
+    gate-feed-max-size: 200
+  password:
+    generated-length: ${GENERATED_PASSWORD_LENGTH:12}
+    min-length: 10
+    max-length: 128
+  pass:
+    pin-length: 6
+    # Pepper for the deterministic PIN lookup index. Rotating it invalidates PIN redemption for
+    # existing passes (QR still works), so treat it as a long-lived secret.
+    pin-pepper: ${PASS_PIN_PEPPER:change-me-pass-pin-pepper-32-bytes-min}
+    max-validity-days: 30
+    max-uses-limit: 50
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    login:
+      max-attempts: 5
+      lockout-minutes: 15
+    redeem:
+      max-attempts: 10
+      window-minutes: 1
+  bootstrap:
+    admin-login-id: admin
+    admin-password: ${GATECRASH_BOOTSTRAP_ADMIN_PASSWORD:}
+    # Off by default, and DevDataSeeder refuses to start if it is ever true outside local/test.
+    # Enabled in application-local.yml only.
+    seed-demo-data: false
+    seed-password: ${GATECRASH_SEED_PASSWORD:Township#2026}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui
+  api-docs:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.gatecrash: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] [%X{userId:-}] %logger{36} - %msg%n"

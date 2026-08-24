@@ -1,0 +1,27 @@
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.gatecrash: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
+
+app:
+  bootstrap:
+    # Seeds a block, four flats, a gate and one ready-to-use account per role (DevDataSeeder).
+    # Idempotent, and never touches an account that already exists.
+    seed-demo-data: true
+  firebase:
+    enabled: false          # no service account needed to develop locally; pushes are logged instead
+  security:
+    cors:
+      allowed-origins: http://localhost:3000,http://localhost:5173,http://localhost:8081
+
+springdoc:
+  api-docs:
+    enabled: true
