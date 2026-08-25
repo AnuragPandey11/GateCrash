@@ -20,6 +20,17 @@ public final class AuditAction {
     public static final String REFRESH_REUSE_DETECTED = "REFRESH_REUSE_DETECTED";
     public static final String LOGOUT = "LOGOUT";
 
+    // tenancy (super admin)
+    public static final String TOWNSHIP_CREATED = "TOWNSHIP_CREATED";
+    public static final String TOWNSHIP_UPDATED = "TOWNSHIP_UPDATED";
+    public static final String TOWNSHIP_SUSPENDED = "TOWNSHIP_SUSPENDED";
+    public static final String TOWNSHIP_ARCHIVED = "TOWNSHIP_ARCHIVED";
+    public static final String TOWNSHIP_RESTORED = "TOWNSHIP_RESTORED";
+    public static final String TOWNSHIP_ADMIN_ADDED = "TOWNSHIP_ADMIN_ADDED";
+    public static final String TOWNSHIP_ADMIN_REMOVED = "TOWNSHIP_ADMIN_REMOVED";
+    public static final String SUPER_ADMIN_PROVISIONED = "SUPER_ADMIN_PROVISIONED";
+    public static final String SUPER_ADMIN_REMOVED = "SUPER_ADMIN_REMOVED";
+
     // township
     public static final String BLOCK_CREATED = "BLOCK_CREATED";
     public static final String BLOCK_DELETED = "BLOCK_DELETED";

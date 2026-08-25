@@ -20,7 +20,7 @@ blocking work items, not client-side workarounds.
 
 | Surface | Roles | Platform | Ships in |
 |---|---|---|---|
-| Admin Web | `ADMIN` | Browser (Chrome/Edge/Safari, desktop ≥1280px, tablet-tolerant) | Phase 7 |
+| Admin Web | `ADMIN`, `SUPER_ADMIN` | Browser (Chrome/Edge/Safari, desktop ≥1280px, tablet-tolerant) | Phase 7 (console: F5b) |
 | Mobile | `GUARD`, `RESIDENT`, `SALES` | Android 8+ / iOS 15+ | Phase 8 |
 
 Out of scope for Phase 1: payments, self-signup, OTP, in-app chat, visitor photo capture *until* the
@@ -30,11 +30,20 @@ Non-negotiable product facts that shape every screen:
 
 1. **There is no self-service anything.** No signup, no password reset by email, no "forgot password".
    An admin provisions the account and hands over a generated password. The login screen has exactly
-   two fields and no third link.
-2. **Guard is a single-purpose appliance.** The gate tablet does one job under time pressure, often
+   three fields and no link.
+2. **The backend is multi-tenant, and the township is part of the credential.** Login is
+   `(townshipCode, loginId, password)` — login ids are unique only within a township, so `A-101-1`
+   exists in every township with a block A. The code is a *field*, not a filter, and a `SUPER_ADMIN`
+   signs in with it blank because it belongs to no township. A blank field must be submitted as
+   **absent**, never as an empty string, which would be a present code matching no township.
+3. **Guard is a single-purpose appliance.** The gate tablet does one job under time pressure, often
    one-handed, often in direct sunlight. It gets its own visual language (§10.3).
-3. **Postgres is the source of truth.** Push and WebSocket are accelerants. Every screen that consumes
+4. **Postgres is the source of truth.** Push and WebSocket are accelerants. Every screen that consumes
    a live event must be able to render correctly from a plain REST fetch alone (§6.5).
+5. **The client never decides which township a request acts in.** For every role but `SUPER_ADMIN` the
+   server takes it from the account row and refuses a header that disagrees (`403 TOWNSHIP_MISMATCH`).
+   A super admin's selected township is sent as `X-Township-Id` by `ApiClient` — read fresh per
+   request from the session store, so switching township takes effect on the next call, not a reload.
 
 ---
 
@@ -42,6 +51,7 @@ Non-negotiable product facts that shape every screen:
 
 | Role | Home | Screens |
 |---|---|---|
+| `SUPER_ADMIN` (web) | Township list | Township list · Onboarding wizard (township + first admin) · Township detail (admins, suspend/archive/restore) · Platform operators · **plus every `ADMIN` screen below**, scoped to the township selected in the shell switcher |
 | `ADMIN` (web) | Live occupancy | Occupancy board · Visitor log (filter/export) · Notification composer + history · Community posts · Users · Township (blocks/flats/gates) |
 | `GUARD` (mobile) | Gate console | Gate picker · Log walk-in · Awaiting-decision · Scan/keypad redeem · Gate activity feed (check-in/out) |
 | `RESIDENT` (mobile) | Approvals | Pending approvals · Visit history · My passes + create pass · Community feed · Inbox |
@@ -50,6 +60,13 @@ Non-negotiable product facts that shape every screen:
 `GUARD` deliberately has **no** community feed and **no** inbox — the backend forbids it
 (`CommunityService` is `ADMIN, RESIDENT, SALES`), and a gate appliance should not have a reading surface.
 Guards *do* receive `VISIT_DECIDED` and `VISIT_EXPIRED` pushes.
+
+`SUPER_ADMIN` reaches the `ADMIN` screens because the backend grants it `ROLE_ADMIN` alongside
+`ROLE_SUPER_ADMIN` — but only inside the township it has selected, and **only once it has selected
+one**: a township-scoped call with no `X-Township-Id` is `422 TOWNSHIP_CONTEXT_REQUIRED`, so the shell
+must make the operator pick before rendering any of them. It is deliberately not granted `GUARD`,
+`RESIDENT` or `SALES`, so it never gets a mobile surface — those roles are the physical parties to a
+visit, and standing in for them would make the audit trail a fiction.
 
 ---
 
@@ -179,7 +196,12 @@ Three of these will bite on day one if not handled centrally:
    with `400 MALFORMED_BODY`. So a client must never `PATCH` a spread of a response object back. Every
    mutation builds an explicit request body from a Zod-validated form value. No `{...visit, status}`.
 2. **`Content-Type: application/json`** on every body-bearing request, or `415 UNSUPPORTED_MEDIA_TYPE`.
-3. **`X-Correlation-Id`** is allowed on request and exposed on response by the CORS config. Generate a
+3. **`X-Township-Id`** names the township a `SUPER_ADMIN` is acting inside. `ApiClient` attaches it
+   automatically, and only when the session has no township of its own — sending it for any other role
+   is `403 TOWNSHIP_MISMATCH` by design, so no feature code should ever set it by hand. Omitting it on
+   a township-scoped endpoint is `422 TOWNSHIP_CONTEXT_REQUIRED`, which is the shell's cue to make the
+   operator pick a township rather than a bug to paper over with a default.
+4. **`X-Correlation-Id`** is allowed on request and exposed on response by the CORS config. Generate a
    UUID per request, send it, and surface it in error toasts (§11.3). It is how a support ticket becomes
    a log line.
 
@@ -298,6 +320,23 @@ Everything the clients may call. `A`=ADMIN, `G`=GUARD, `R`=RESIDENT, `S`=SALES.
 `POST /admin/users` · `GET /admin/users?role&active&flatId&search` · `GET /admin/users/{id}` ·
 `PATCH /admin/users/{id}` · `DELETE /admin/users/{id}` (deactivate) · `POST /admin/users/{id}/activate` ·
 `POST /admin/users/{id}/reset-password` — all A
+
+> `POST /admin/users` refuses `role: 'ADMIN'` from a township admin (`403 ADMIN_REQUIRES_SUPER_ADMIN`)
+> and `role: 'SUPER_ADMIN'` outright (`422 ROLE_NOT_PROVISIONABLE`). The role picker is built from
+> `PROVISIONABLE_ROLES`, not `USER_ROLES` — a dropdown offering two options that can only fail is a
+> worse experience than one that never offered them.
+
+**Platform** (`SUPER_ADMIN` only; no `X-Township-Id` needed, these act *on* townships) —
+`POST /super/townships` (township + first admin, password once) · `GET /super/townships?includeArchived` ·
+`GET|PATCH /super/townships/{id}` · `POST /super/townships/{id}/suspend` ·
+`DELETE /super/townships/{id}` (**archive**; body `{ confirmCode }` must equal the township's code) ·
+`POST /super/townships/{id}/restore` · `GET|POST /super/townships/{id}/admins` ·
+`DELETE /super/townships/{id}/admins/{userId}` · `POST /super/townships/{id}/admins/{userId}/reset-password` ·
+`GET|POST /super/admins` · `DELETE /super/admins/{userId}` · `POST /super/admins/{userId}/activate` ·
+`POST /super/admins/{userId}/reset-password`
+
+> Typed in `packages/api/src/endpoints/platform.ts`, with hooks in `queries/hooks.ts`. The console
+> that drives them is `/townships` — see §8.9. The `/super/admins` group has no screen yet.
 
 **Township** — `POST/DELETE /admin/blocks|flats|gates` (A) · `GET /admin/blocks` · `GET /admin/flats?blockId` ·
 `GET /admin/gates` — **`A` and `G`**
@@ -432,10 +471,22 @@ the phone keeps getting the previous user's visitor pushes. This ordering is a r
 
 `LoginAttemptService`: 5 failed attempts → 15-minute lockout, `429`. `Redeem`: 10 attempts/minute.
 
-The login form must distinguish "wrong password" (401) from "locked out" (429) and, for the latter, show
-the lockout duration and disable the submit button — a guard mashing a locked login is how a shift starts
-badly. For redeem, throttle the keypad's submit client-side at 1 req/2s so the user's own impatience
-doesn't burn the server budget.
+The login budget is keyed on `(townshipCode, loginId)`, so one township's failures cannot lock out
+another township's account of the same name.
+
+The login form must distinguish three outcomes:
+
+- **401** — wrong township code, login id or password. All three are deliberately indistinguishable
+  server-side, so the message must be too; a specific one would let anyone enumerate the platform's
+  customer list from the login form.
+- **429** — locked out. Show the lockout duration and disable submit; a guard mashing a locked login
+  is how a shift starts badly.
+- **403 `TOWNSHIP_INACTIVE`** — the credentials were right and the township is suspended or archived.
+  Say so plainly. It is only reachable with valid credentials, so it discloses nothing, and "wrong
+  password" would send an entire township chasing a problem they do not have.
+
+For redeem, throttle the keypad's submit client-side at 1 req/2s so the user's own impatience doesn't
+burn the server budget.
 
 ---
 
@@ -449,8 +500,14 @@ Destinations and their authorised subscribers, from `StompAuthChannelInterceptor
 |---|---|---|
 | `/user/queue/visits` | any authenticated user (rewritten to self) | `VISIT_REQUESTED` |
 | `/user/queue/notifications` | any authenticated user | `ANNOUNCEMENT` |
-| `/topic/gate/{gateId}` | `GUARD`, `ADMIN` | `VISIT_DECIDED`, `VISIT_EXPIRED` |
-| `/topic/admin/inside` | `ADMIN` only | `OCCUPANCY_CHANGED` |
+| `/topic/gate/{gateId}` | `GUARD`, `ADMIN`, `SUPER_ADMIN` — and only for a gate **in the subscriber's own township** | `VISIT_DECIDED`, `VISIT_EXPIRED` |
+| `/topic/admin/inside/{townshipId}` | `ADMIN` of that township, or `SUPER_ADMIN` | `OCCUPANCY_CHANGED` |
+
+**The occupancy destination carries the township id.** A single shared `/topic/admin/inside` would push
+every township's movements to every township's dashboard, and no client-side filtering fixes that once
+the frame has left the server. Subscribing to the bare path now fails the interceptor — and a failed
+SUBSCRIBE kills the whole session, not just that subscription, so there is no soft-migration path: the
+id is required. An admin with no township in context subscribes to occupancy not at all.
 
 **Client→server `SEND` is rejected outright.** There are no `@MessageMapping` endpoints. The socket is
 read-only; every write is REST. Do not design a feature that needs to publish over the socket.
@@ -503,7 +560,12 @@ One `RealtimeClient` per app, owned by a provider, with:
 
 ```ts
 const SUBSCRIPTIONS: Record<UserRole, (ctx: Ctx) => string[]> = {
-  ADMIN:    (c) => ['/topic/admin/inside', ...c.watchedGateIds.map(g => `/topic/gate/${g}`),
+  // A super admin has no township of its own, so it watches whichever one the console has selected
+  // — and nothing at all before it has selected one.
+  SUPER_ADMIN: (c) => [...(c.townshipId ? [`/topic/admin/inside/${c.townshipId}`] : []),
+                    ...c.watchedGateIds.map(g => `/topic/gate/${g}`)],
+  ADMIN:    (c) => [...(c.townshipId ? [`/topic/admin/inside/${c.townshipId}`] : []),
+                    ...c.watchedGateIds.map(g => `/topic/gate/${g}`),
                     '/user/queue/notifications'],
   GUARD:    (c) => c.selectedGateId ? [`/topic/gate/${c.selectedGateId}`] : [],
   RESIDENT: () => ['/user/queue/visits', '/user/queue/notifications'],
@@ -743,6 +805,42 @@ surface that as "This flat has residents or visit history and can't be removed."
 Bulk flat creation is the one quality-of-life feature worth building client-side: a "add A-101 … A-110"
 range helper that fires N sequential `POST /admin/flats` with a progress bar and a per-row result list.
 Sequential, not parallel — don't hammer the box, and partial failure must be legible.
+
+### 8.9 Platform console (`/townships`, `SUPER_ADMIN` only)
+
+Note the two similar names: **§8.8 `/township`** is the *inside* of one township — its blocks, flats
+and gates. **This** screen is the platform: the townships themselves.
+
+A table of townships (code, name, status, admin and user counts) with an archived filter that is off
+by default. The admin count doubles as a disclosure toggle, expanding the row into that township's
+administrators with appoint and remove.
+
+Three behaviours carry the weight:
+
+**1. Selecting a township is what makes the rest of the app work.** A `SUPER_ADMIN` belongs to none,
+so every township-scoped endpoint answers `422 TOWNSHIP_CONTEXT_REQUIRED` until one is chosen.
+Choosing one writes `actingTownshipId`; `ApiClient` reads it per request and sends `X-Township-Id`.
+Until then the shell renders **no township-scoped nav at all** and the router does not define those
+routes — a `path="*"` guard would not do it, because React Router ranks by specificity and
+`/occupancy` would still out-rank the catch-all and load a screen whose every request is refused.
+
+**2. Archive is the one typed-confirmation dialog in the app.** The standing rule (§8.5.4) is that
+typing trains people to type without reading, so destructive actions get a deliberate second click
+instead. This is the exception, and it earns it twice over: the server itself requires the township's
+code back in the body, and a mis-clicked row takes every resident and guard in a community offline in
+one request. The copy says in plain words that the visitor log and audit trail are kept and that
+Restore reverses it, because the word "Archive" beside a red button reads as "Delete" to everyone.
+
+**3. An archived township is not offered as somewhere to work.** The server answers
+`409 TOWNSHIP_ARCHIVED` for that, so the row shows Restore and nothing else — offering the control
+and letting it fail would be a lie the UI told first.
+
+The one-time credential dialog (§8.7) is reused for the first admin and for later appointments, and
+now carries the **township code** alongside the login id. That is not decoration: the credential is
+the pair, and a hand-off card without the code is one nobody can sign in with.
+
+Not built yet: a township detail page, a screen for `/super/admins` (peer platform operators), and an
+audit-log viewer.
 
 ---
 
@@ -1023,12 +1121,15 @@ reporter is chosen (Sentry recommended) — with a scrubber that drops `password
 | E2E mobile | Maestro | Guard: log walk-in → (scripted approval) → approved screen → check in. Resident: push tap → approve. |
 | A11y | axe (web), manual TalkBack/VoiceOver pass (mobile) | Per release |
 
-Two tests that are non-negotiable because they encode the architecture:
+Three tests that are non-negotiable because they encode the architecture:
 
 1. **Socket-dead reconciliation.** With the STOMP client stubbed to never connect, the guard's awaiting
    screen still reaches `APPROVED` via polling, and the resident's approvals list still populates.
 2. **Password-reset lockout.** With `mustResetPassword: true`, every navigation attempt lands on the
    change-password screen and no other endpoint is called.
+3. **A blank township code is submitted as absent.** An empty string is a *present* code matching no
+   township, and would turn every super-admin sign-in into a 401. The Zod transform in
+   `loginRequestSchema` is what makes this true, and the login test asserts it.
 
 MSW handlers live in `packages/api/src/mocks` and are shared by both apps, so a contract change breaks
 one set of mocks, not two.
@@ -1239,6 +1340,22 @@ keypad redeem with the walk-in fallback · gate activity with check-out.
 buzzes, resident approves, **guard's screen flips green in under a second**, guard checks in, admin's
 occupancy board increments.
 
+### F5b — Admin: super admin console
+Township list with status chips and the archived filter · onboarding wizard (township + first admin,
+one-time credential dialog carrying the township code) · inline admin list with appoint/remove ·
+suspend / restore / archive · township selection that sets `actingTownshipId`.
+
+The contract half was already typed — `packages/api/src/endpoints/platform.ts`,
+`PROVISIONABLE_ROLES`, `isPlatformOperator`/`canManageTownships`, and the `X-Township-Id` wiring in
+`ApiClient` — so this phase was screens, not plumbing. See §8.9.
+
+**DoD:** a super admin onboards a township, its admin signs in with the new code, the super admin
+switches into that township and provisions a guard, then archives and restores it — with the archived
+township's visitor log intact afterwards.
+
+Still open here: a township detail page, a screen for `/super/admins` (peer platform operators), and
+an audit-log viewer.
+
 ### F9 — Hardening
 A11y pass · i18n extraction complete · crash reporting with the secret scrubber · Playwright + Maestro
 suites · sunlight/field test of the guard console on the actual tablet hardware · performance pass
@@ -1252,7 +1369,8 @@ suites · sunlight/field test of the guard console on the actual tablet hardware
 Mirror these exactly; they are Postgres enum types and the server rejects anything else.
 
 ```ts
-type UserRole    = 'ADMIN' | 'GUARD' | 'RESIDENT' | 'SALES';
+type UserRole    = 'SUPER_ADMIN' | 'ADMIN' | 'GUARD' | 'RESIDENT' | 'SALES';
+type TownshipStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
 type VisitorType = 'GUEST' | 'DELIVERY' | 'MAINTENANCE' | 'CLIENT';
 type VisitStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CHECKED_IN' | 'CHECKED_OUT';
 type ApproverKind = 'RESIDENT' | 'SALES';
@@ -1268,13 +1386,21 @@ type Decision    = 'APPROVED' | 'REJECTED';
 Field names are exact. `?` marks nullable.
 
 ```ts
-LoginResponse   { accessToken, refreshToken, tokenType, expiresInSeconds, mustResetPassword, role, userId, fullName }
-MeResponse      { id, loginId, fullName, role, mustResetPassword, onDuty, flatId?, flatNumber?, blockName? }
-UserResponse    { id, loginId, fullName, role, phone?, email?, active, mustResetPassword, onDuty,
-                  flatId?, flatNumber?, blockName?, createdAt }
-CreatedUserResponse  { id, loginId, fullName, role, generatedPassword }   // once
-ResetPasswordResponse{ id, loginId, generatedPassword }                   // once
+LoginResponse   { accessToken, refreshToken, tokenType, expiresInSeconds, mustResetPassword, role, userId, fullName,
+                  townshipId?, townshipCode?, townshipName? }   // all three null for a SUPER_ADMIN
+MeResponse      { id, loginId, fullName, role, mustResetPassword, onDuty, flatId?, flatNumber?, blockName?,
+                  townshipId?, townshipCode?, townshipName? }
+UserResponse    { id, loginId, townshipId, fullName, role, phone?, email?, active, mustResetPassword,
+                  onDuty, flatId?, flatNumber?, blockName?, createdAt }
+CreatedUserResponse  { id, loginId, fullName, role, townshipId?, generatedPassword }   // once
+ResetPasswordResponse{ id, loginId, generatedPassword }                                // once
 SalesAgentResponse   { id, fullName, loginId }
+
+// Platform (SUPER_ADMIN)
+TownshipResponse { id, code, name, status, contactEmail?, contactPhone?, activeUserCount,
+                   activeAdminCount, blockCount, gateCount, createdAt, archivedAt? }
+CreatedTownshipResponse { township: TownshipResponse, admin: CreatedUserResponse }   // password once
+SuperAdminResponse      { id, loginId, fullName, phone?, email?, active, mustResetPassword, createdAt }
 
 VisitResponse   { id, gateId, gateName, visitorName, visitorPhone?, visitorType, vehicleNo?, photoUrl?,
                   status, approverKind?, approverId?, approverName?, targetFlatId?, targetFlatNumber?,

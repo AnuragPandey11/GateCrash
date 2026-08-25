@@ -1,4 +1,4 @@
-import type { UserId } from '@gatecrash/core';
+import type { TownshipId, UserId } from '@gatecrash/core';
 import { ApiException, networkException, toApiException } from './errors';
 import { correlationId, CORRELATION_HEADER } from './correlation';
 
@@ -90,6 +90,24 @@ export interface LoginResponseLike extends Tokens {
   role: string;
   userId: string;
   fullName: string;
+  /** `null` for a SUPER_ADMIN, which belongs to no township. Non-null for every other role. */
+  townshipId: string | null;
+  townshipCode: string | null;
+  townshipName: string | null;
+}
+
+/**
+ * The credential `POST /auth/login` takes.
+ *
+ * `townshipCode` is part of the credential, not a convenience: login ids are unique only within a
+ * township, so `A-101-1` exists in every township that has a block A. Omitting the code resolves
+ * against the tenantless platform namespace instead, which is how a SUPER_ADMIN signs in — so a
+ * login form must send `undefined`, never an empty string, when there is no code to send.
+ */
+export interface LoginRequest {
+  townshipCode?: string;
+  loginId: string;
+  password: string;
 }
 
 export type SessionEndReason = 'LOGOUT' | 'REFRESH_FAILED' | 'REFRESH_MISSING' | 'REVOKED';
@@ -110,6 +128,7 @@ export class SessionManager {
   private inFlight: Promise<Tokens> | null = null;
   private expiresAt: number | null = null;
   private currentUserId: UserId | null = null;
+  private sessionTownshipId: TownshipId | null = null;
 
   constructor({ baseUrl, store, onSessionEnd }: SessionManagerOptions) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -123,6 +142,18 @@ export class SessionManager {
 
   getUserId(): UserId | null {
     return this.currentUserId;
+  }
+
+  /**
+   * The township this session is bound to, or `null` for a SUPER_ADMIN.
+   *
+   * Read by `ApiClient` to decide whether to send `X-Township-Id`. Note what it is *not*: an
+   * override. For every role but SUPER_ADMIN the server takes the township from the account row and
+   * refuses a header that disagrees with it (403 `TOWNSHIP_MISMATCH`), so this value can only ever
+   * confirm what the server already knows.
+   */
+  getTownshipId(): TownshipId | null {
+    return this.sessionTownshipId;
   }
 
   hasRefreshToken(): Promise<boolean> {
@@ -149,6 +180,7 @@ export class SessionManager {
     await this.store.setTokens(response);
     this.expiresAt = Date.now() + response.expiresInSeconds * 1000;
     this.currentUserId = response.userId as UserId;
+    this.sessionTownshipId = (response.townshipId as TownshipId | null) ?? null;
   }
 
   /** Within `marginSeconds` of expiry — the cue for a proactive refresh on foreground (§5.3). */
@@ -219,6 +251,7 @@ export class SessionManager {
     await this.store.clear();
     this.expiresAt = null;
     this.currentUserId = null;
+    this.sessionTownshipId = null;
   }
 
   private endSession(reason: SessionEndReason): void {

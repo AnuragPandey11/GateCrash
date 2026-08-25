@@ -33,6 +33,13 @@ public class AuditLog {
     @Column(name = "actor_id")
     private UUID actorId;
 
+    /**
+     * The tenant the action happened in. Null only for platform-level actions -- a super admin
+     * creating or archiving a township acts on the platform, not inside one.
+     */
+    @Column(name = "township_id")
+    private UUID townshipId;
+
     @Column(name = "action", nullable = false, updatable = false)
     private String action;
 

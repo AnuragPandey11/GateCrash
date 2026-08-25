@@ -1,12 +1,14 @@
 package com.gatecrash.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gatecrash.common.tenant.TenantContextFilter;
 import com.gatecrash.security.AppUserDetailsService;
 import com.gatecrash.security.JwtAuthFilter;
 import com.gatecrash.security.JwtService;
 import com.gatecrash.security.PasswordResetEnforcementFilter;
 import com.gatecrash.security.RestAccessDeniedHandler;
 import com.gatecrash.security.RestAuthenticationEntryPoint;
+import com.gatecrash.township.TownshipRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -67,10 +69,12 @@ public class SecurityConfig {
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
     private final AppProperties properties;
+    private final TownshipRepository townships;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtService, userDetailsService, objectMapper);
+        TenantContextFilter tenantContextFilter = new TenantContextFilter(townships, objectMapper);
         PasswordResetEnforcementFilter passwordResetFilter = new PasswordResetEnforcementFilter(objectMapper);
 
         http
@@ -103,10 +107,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // Layer 1 for the platform surface. The real check is @PreAuthorize on
+                        // SuperAdminTownshipService, but drawing the boundary here as well means a
+                        // new endpoint added under /super is closed by default rather than open.
+                        .requestMatchers("/api/v1/super/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
-                // Both slot in ahead of UsernamePasswordAuthenticationFilter; insertion order is
-                // preserved, so authentication runs first and the reset gate sees its result.
+                // All three slot in ahead of UsernamePasswordAuthenticationFilter; insertion order is
+                // preserved, so authentication runs first, the tenant is resolved from its result,
+                // and the reset gate sees both.
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(tenantContextFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(passwordResetFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -136,7 +146,8 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id",
+                TenantContextFilter.TOWNSHIP_HEADER));
         config.setExposedHeaders(List.of("X-Correlation-Id"));
         config.setAllowCredentials(false);
         config.setMaxAge(Duration.ofHours(1));

@@ -5,6 +5,7 @@ import com.gatecrash.common.SafeUrl;
 import com.gatecrash.common.audit.AuditAction;
 import com.gatecrash.common.audit.AuditService;
 import com.gatecrash.common.exception.NotFoundException;
+import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.community.dto.CommunityDtos.CreatePostRequest;
 import com.gatecrash.community.dto.CommunityDtos.PostResponse;
 import com.gatecrash.security.SecurityUtils;
@@ -26,8 +27,9 @@ import java.util.stream.Collectors;
 /**
  * The community feed.
  *
- * <p>Read access excludes guards: the feed is for people who live and sell in the township, and a
- * shared tablet at the gate is the last place resident-facing announcements should be visible.
+ * <p>One feed per township. Read access excludes guards: the feed is for people who live and sell in
+ * the township, and a shared tablet at the gate is the last place resident-facing announcements
+ * should be visible.
  *
  * <p>Post bodies are stored verbatim, HTML and all. Escaping belongs at the point of rendering, not
  * of storage -- sanitising here would corrupt legitimate text and still leave a client that renders
@@ -48,6 +50,7 @@ public class CommunityService {
         UUID authorId = SecurityUtils.currentUserId();
 
         CommunityPost post = new CommunityPost();
+        post.setTownshipId(TenantContext.requireTownshipId());
         post.setAuthorId(authorId);
         post.setTitle(request.title().trim());
         post.setBody(request.body().trim());
@@ -66,7 +69,8 @@ public class CommunityService {
     @PreAuthorize("hasAnyRole('ADMIN','RESIDENT','SALES')")
     @Transactional(readOnly = true)
     public PageResponse<PostResponse> feed(Pageable pageable) {
-        Page<CommunityPost> page = posts.findAllByOrderByPinnedDescPublishedAtDesc(pageable);
+        Page<CommunityPost> page = posts.findByTownshipIdOrderByPinnedDescPublishedAtDesc(
+                TenantContext.requireTownshipId(), pageable);
 
         // Resolve author names for the page in one query rather than one per post.
         List<UUID> authorIds = page.getContent().stream().map(CommunityPost::getAuthorId).distinct().toList();
@@ -79,7 +83,7 @@ public class CommunityService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public void delete(UUID postId) {
-        CommunityPost post = posts.findById(postId)
+        CommunityPost post = posts.findByIdAndTownshipId(postId, TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Post", postId));
         posts.delete(post);
         audit.record(AuditAction.POST_DELETED, "community_post", postId, null);

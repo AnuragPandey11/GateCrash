@@ -23,6 +23,12 @@ export function App() {
   // The socket connects only in `authenticated`. In `mustResetPassword` the STOMP interceptor
   // refuses CONNECT outright, so attempting it would be a guaranteed failure loop (§5.1).
   const role = useSessionStore((s) => (s.state === 'authenticated' ? (s.me?.role ?? null) : null));
+  // The occupancy topic is keyed by township, so the socket needs to know which one this session
+  // is looking at. For a super admin that is whatever the console has selected; for everyone else
+  // it is simply their own, seeded from `me`.
+  const townshipId = useSessionStore((s) =>
+    s.state === 'authenticated' ? ((s.actingTownshipId as never) ?? null) : null,
+  );
 
   const onEvent = useCallback(
     (frame: RealtimeFrame) => {
@@ -49,6 +55,7 @@ export function App() {
         getAccessToken={() => sessionManager.getAccessToken()}
         refreshAccessToken={() => sessionManager.refreshOnce()}
         role={role}
+        townshipId={townshipId}
         onEvent={onEvent}
       >
         <BrowserRouter>

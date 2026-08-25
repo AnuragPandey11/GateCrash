@@ -1,4 +1,4 @@
-import type { GateId, UserRole } from '@gatecrash/core';
+import type { GateId, TownshipId, UserRole } from '@gatecrash/core';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -34,6 +34,13 @@ export interface RealtimeProviderProps {
   refreshAccessToken: () => Promise<unknown>;
   /** Null while unauthenticated or mid-password-reset — the client stays disconnected. */
   role: UserRole | null;
+  /**
+   * The township whose live feeds to subscribe to. For every role but SUPER_ADMIN this is the
+   * session's own township; for a super admin it is the one they have selected in the console, and
+   * until they select one there is nothing to subscribe to — the occupancy destination carries the
+   * township id, so there is no tenant-agnostic form of it to fall back on.
+   */
+  townshipId?: TownshipId | null;
   /** GUARD: the gate this device stands at. ADMIN: gates the current screen watches. */
   selectedGateId?: GateId | null;
   watchedGateIds?: readonly GateId[];
@@ -47,6 +54,7 @@ export function RealtimeProvider({
   getAccessToken,
   refreshAccessToken,
   role,
+  townshipId = null,
   selectedGateId = null,
   watchedGateIds,
   onEvent,
@@ -86,6 +94,7 @@ export function RealtimeProvider({
       return;
     }
     client.connect(role, {
+      townshipId,
       selectedGateId,
       watchedGateIds: watchedGateIds ?? [],
     });
@@ -93,12 +102,13 @@ export function RealtimeProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, role]);
 
-  // A gate change re-subscribes without dropping the socket.
+  // A gate or township change re-subscribes without dropping the socket. A super admin switching
+  // township in the console is exactly this path: same connection, different occupancy topic.
   useEffect(() => {
     if (!role) return;
-    client.updateContext({ selectedGateId, watchedGateIds: watchedGateIds ?? [] });
+    client.updateContext({ townshipId, selectedGateId, watchedGateIds: watchedGateIds ?? [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, role, selectedGateId, gateKey]);
+  }, [client, role, townshipId, selectedGateId, gateKey]);
 
   // The other half of guardrail #7: window focus reconciles even if the socket never dropped.
   useEffect(() => {

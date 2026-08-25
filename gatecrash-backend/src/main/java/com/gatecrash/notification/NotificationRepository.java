@@ -8,5 +8,5 @@ import java.util.UUID;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
-    Page<Notification> findAllByOrderByCreatedAtDesc(Pageable pageable);
+    Page<Notification> findByTownshipIdOrderByCreatedAtDesc(UUID townshipId, Pageable pageable);
 }

@@ -27,9 +27,27 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
      * quietly overwriting it.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select v from VisitorLog v where v.id = :id")
-    Optional<VisitorLog> findByIdForUpdate(@Param("id") UUID id);
+    @Query("select v from VisitorLog v where v.id = :id and v.township.id = :townshipId")
+    Optional<VisitorLog> findByIdForUpdate(@Param("id") UUID id,
+                                           @Param("townshipId") UUID townshipId);
 
+    @Query("""
+           select v from VisitorLog v
+             join fetch v.gate
+             left join fetch v.approver
+             left join fetch v.targetFlat
+            where v.id = :id and v.township.id = :townshipId
+           """)
+    Optional<VisitorLog> findDetailedById(@Param("id") UUID id,
+                                          @Param("townshipId") UUID townshipId);
+
+    /**
+     * Unscoped detail fetch, for the after-commit notifier only.
+     *
+     * <p>The notifier runs on a pool thread with no request and therefore no tenant context; it is
+     * re-reading a row whose id it was handed by the transaction that just created it, not resolving
+     * anything a caller supplied. Nothing that serves an HTTP request may use this.
+     */
     @Query("""
            select v from VisitorLog v
              join fetch v.gate
@@ -37,7 +55,10 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
              left join fetch v.targetFlat
             where v.id = :id
            """)
-    Optional<VisitorLog> findDetailedById(@Param("id") UUID id);
+    Optional<VisitorLog> findDetailedByIdUnscoped(@Param("id") UUID id);
+
+    // Approver and flat ids are themselves tenant-unique, so these two inboxes cannot cross a
+    // boundary; they are the caller's own routing targets, taken from the authenticated principal.
 
     /** A sales agent's inbox: visits routed to them personally. */
     List<VisitorLog> findByApprover_IdAndStatusOrderByCreatedAtDesc(UUID approverId, VisitStatus status);
@@ -45,9 +66,9 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
     /** A resident's inbox: anything pending on their flat, whoever the nominated approver is. */
     List<VisitorLog> findByTargetFlat_IdAndStatusOrderByCreatedAtDesc(UUID flatId, VisitStatus status);
 
-    List<VisitorLog> findByStatusOrderByCheckedInAtDesc(VisitStatus status);
+    List<VisitorLog> findByTownship_IdAndStatusOrderByCheckedInAtDesc(UUID townshipId, VisitStatus status);
 
-    long countByStatus(VisitStatus status);
+    long countByTownship_IdAndStatus(UUID townshipId, VisitStatus status);
 
     Page<VisitorLog> findByGate_IdOrderByCreatedAtDesc(UUID gateId, Pageable pageable);
 

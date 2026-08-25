@@ -68,19 +68,28 @@ public record AppProperties(
         }
     }
 
-    /** Bootstrap admin credentials. {@code adminPassword} is blank unless supplied by the environment. */
     /**
      * Bootstrap and local-development seeding.
      *
-     * <p>{@code seedDemoData} creates a usable township — a block, flats, a gate and one account
-     * per role — so a developer or a frontend can be exercised end to end without provisioning
-     * five accounts by hand. It is refused outside the local/test profiles by
+     * <p>Two bootstrap accounts, because there are two levels of authority. {@code superAdminLoginId}
+     * is the platform operator, belongs to no township, and is the account that creates townships in
+     * the first place. {@code adminLoginId} is the administrator of the {@code DEFAULT} township that
+     * {@code V3__multi_tenancy.sql} adopts any pre-multi-tenancy data into -- on a fresh install it
+     * is simply the first township, ready to use. Both passwords are blank unless supplied by the
+     * environment.
+     *
+     * <p>{@code seedDemoData} fills that default township out — a block, flats, a gate and one
+     * account per role — so a developer or a frontend can be exercised end to end without
+     * provisioning five accounts by hand. It is refused outside the local/test profiles by
      * {@code DevDataSeeder}, because accounts sharing a known password are a breach waiting to
      * happen anywhere real.
      */
     public record Bootstrap(
+            @NotBlank String superAdminLoginId,
+            String superAdminPassword,
             @NotBlank String adminLoginId,
             String adminPassword,
+            @NotBlank String defaultTownshipCode,
             boolean seedDemoData,
             String seedPassword) {
     }

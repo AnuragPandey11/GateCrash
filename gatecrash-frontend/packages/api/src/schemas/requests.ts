@@ -72,7 +72,24 @@ export const safeUrlSchema = z
 
 // ── Auth ────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Login is `(townshipCode, loginId, password)`.
+ *
+ * The code is part of the credential, not a convenience field: login ids are unique only within a
+ * township, so `A-101-1` exists in every township with a block A. It is optional for exactly one
+ * caller — a SUPER_ADMIN belongs to no township and signs in without one.
+ *
+ * The transform to `undefined` matters: an empty string is a *present* code that matches no
+ * township, which the server correctly answers with 401. Dropping it instead resolves against the
+ * platform namespace, which is what an operator leaving the field blank actually means.
+ */
 export const loginRequestSchema = z.object({
+  townshipCode: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .transform((value) => (value ? value.toUpperCase() : undefined)),
   loginId: z.string().trim().min(1, 'Enter your login ID.').max(64),
   password: z.string().min(1, 'Enter your password.').max(128),
 });

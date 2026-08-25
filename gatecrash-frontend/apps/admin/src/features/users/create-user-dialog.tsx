@@ -5,7 +5,7 @@ import {
   type CreateUserRequest,
   type CreatedUserResponse,
 } from '@gatecrash/api';
-import { USER_ROLES, type UserRole } from '@gatecrash/core';
+import { PROVISIONABLE_ROLES, type UserRole } from '@gatecrash/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -116,7 +116,9 @@ export function CreateUserDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {USER_ROLES.map((option) => (
+                  {/* ADMIN and SUPER_ADMIN are absent on purpose: only a super admin appoints a
+                      township's administrator, and a SUPER_ADMIN belongs to no township at all. */}
+                  {PROVISIONABLE_ROLES.map((option) => (
                     <SelectItem key={option} value={option}>
                       {t(`role.${option}`)}
                     </SelectItem>

@@ -29,8 +29,11 @@ app:
       max-attempts: 10
       window-minutes: 1
   bootstrap:
+    super-admin-login-id: superadmin
+    super-admin-password: BootstrapSuper#2026
     admin-login-id: admin
     admin-password: BootstrapAdmin#2026
+    default-township-code: DEFAULT
 
 logging:
   level:

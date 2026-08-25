@@ -6,6 +6,8 @@ import com.gatecrash.township.Flat;
 import com.gatecrash.township.FlatRepository;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.GateRepository;
+import com.gatecrash.township.Township;
+import com.gatecrash.township.TownshipRepository;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.user.AppUserRepository;
 import com.gatecrash.user.PasswordPolicy;
@@ -42,7 +44,12 @@ import java.util.List;
  * — either one alone would be a single point of failure for a mistake nobody would notice until
  * after it mattered.
  *
- * <p>Runs after {@link BootstrapAdminInitializer} so the admin row already has its password set.
+ * <p>Everything is seeded into the {@code DEFAULT} township created by {@code V3__multi_tenancy.sql},
+ * so a local sign-in is {@code DEFAULT} + the login id below. The platform's {@code superadmin} is
+ * normalised to the same password so the super-admin surface is reachable without a second lookup
+ * through the logs.
+ *
+ * <p>Runs after {@link BootstrapAdminInitializer} so the admin rows already have their passwords set.
  *
  * <p>Everything here is idempotent: existing rows are left exactly as they are, so a restart
  * neither duplicates nor overwrites. In particular an admin who has already chosen their own
@@ -61,6 +68,7 @@ public class DevDataSeeder implements ApplicationRunner {
     private static final List<String> FLAT_NUMBERS = List.of("A-101", "A-102", "A-103", "A-104");
 
     private final AppUserRepository users;
+    private final TownshipRepository townships;
     private final BuildingBlockRepository blocks;
     private final FlatRepository flats;
     private final GateRepository gates;
@@ -109,13 +117,19 @@ public class DevDataSeeder implements ApplicationRunner {
         // a null block rather than at the actual misconfiguration).
         validateSeedPassword(password);
 
-        BuildingBlock block = seedBlock();
-        List<Flat> seededFlats = seedFlats(block);
-        seedGate();
+        String townshipCode = properties.bootstrap().defaultTownshipCode();
+        Township township = townships.findByCode(townshipCode)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Township '" + townshipCode + "' is missing. It is created by "
+                                + "V3__multi_tenancy.sql; the schema is not fully migrated."));
+
+        BuildingBlock block = seedBlock(township);
+        List<Flat> seededFlats = seedFlats(township, block);
+        seedGate(township);
 
         List<String> created = new ArrayList<>();
         for (SeedAccount staff : STAFF) {
-            if (seedStaff(staff, password)) {
+            if (seedStaff(township, staff, password)) {
                 created.add(staff.role() + " " + staff.loginId());
             }
         }
@@ -126,15 +140,19 @@ public class DevDataSeeder implements ApplicationRunner {
         Flat firstFlat = seededFlats.isEmpty() ? null : seededFlats.get(0);
         if (firstFlat != null) {
             String residentLoginId = firstFlat.getNumber() + "-1";
-            if (seedResident(residentLoginId, firstFlat, password)) {
+            if (seedResident(township, residentLoginId, firstFlat, password)) {
                 created.add("RESIDENT " + residentLoginId);
             }
         }
 
         String adminLoginId = properties.bootstrap().adminLoginId();
-        boolean adminReady = normaliseBootstrapAdmin(adminLoginId, password);
+        String superAdminLoginId = properties.bootstrap().superAdminLoginId();
+        boolean adminReady = normalise(
+                users.findByTownship_CodeAndLoginId(townshipCode, adminLoginId), password);
+        boolean superAdminReady = normalise(
+                users.findByTownshipIsNullAndLoginId(superAdminLoginId), password);
 
-        if (created.isEmpty() && !adminReady) {
+        if (created.isEmpty() && !adminReady && !superAdminReady) {
             log.info("Demo data already present; nothing to seed.");
             return;
         }
@@ -146,15 +164,18 @@ public class DevDataSeeder implements ApplicationRunner {
 
                 ================================================================
                  DEMO DATA SEEDED (local/test profiles only)
-                   township : {} / {} flats / {}
-                   accounts : {}{}
+                   township : {} ({}) -- {} / {} flats / {}
+                   accounts : {}{}{}
                    password : {}
+                 Sign in with the township code plus the login id; the super
+                 admin signs in with no township code at all.
                  Every seeded account uses that one password. Never enable
                  app.bootstrap.seed-demo-data outside local development.
                 ================================================================""",
-                BLOCK_NAME, FLAT_NUMBERS.size(), GATE_NAME,
+                township.getName(), townshipCode, BLOCK_NAME, FLAT_NUMBERS.size(), GATE_NAME,
                 created.isEmpty() ? "(none new)" : String.join(", ", created),
                 adminReady ? ", ADMIN " + adminLoginId : "",
+                superAdminReady ? ", SUPER_ADMIN " + superAdminLoginId : "",
                 password);
     }
 
@@ -166,6 +187,8 @@ public class DevDataSeeder implements ApplicationRunner {
         List<SeedAccount> candidates = new ArrayList<>(STAFF);
         candidates.add(new SeedAccount(UserRole.ADMIN, properties.bootstrap().adminLoginId(),
                 "Bootstrap Admin", null));
+        candidates.add(new SeedAccount(UserRole.SUPER_ADMIN, properties.bootstrap().superAdminLoginId(),
+                "Bootstrap Super Admin", null));
         // Matches what UserProvisioningService would derive for the first resident of the first flat.
         candidates.add(new SeedAccount(UserRole.RESIDENT, FLAT_NUMBERS.get(0) + "-1",
                 RESIDENT.fullName(), null));
@@ -181,18 +204,17 @@ public class DevDataSeeder implements ApplicationRunner {
         }
     }
 
-    private BuildingBlock seedBlock() {
-        return blocks.findAll().stream()
-                .filter(existing -> existing.getName().equalsIgnoreCase(BLOCK_NAME))
-                .findFirst()
+    private BuildingBlock seedBlock(Township township) {
+        return blocks.findByTownship_IdAndNameIgnoreCase(township.getId(), BLOCK_NAME)
                 .orElseGet(() -> {
                     BuildingBlock block = new BuildingBlock();
+                    block.setTownship(township);
                     block.setName(BLOCK_NAME);
                     return blocks.save(block);
                 });
     }
 
-    private List<Flat> seedFlats(BuildingBlock block) {
+    private List<Flat> seedFlats(Township township, BuildingBlock block) {
         List<Flat> result = new ArrayList<>();
         for (String number : FLAT_NUMBERS) {
             if (flats.existsByBlock_IdAndNumberIgnoreCase(block.getId(), number)) {
@@ -203,6 +225,7 @@ public class DevDataSeeder implements ApplicationRunner {
                 continue;
             }
             Flat flat = new Flat();
+            flat.setTownship(township);
             flat.setBlock(block);
             flat.setNumber(number);
             result.add(flats.save(flat));
@@ -210,44 +233,47 @@ public class DevDataSeeder implements ApplicationRunner {
         return result;
     }
 
-    private void seedGate() {
-        if (gates.existsByNameIgnoreCase(GATE_NAME)) {
+    private void seedGate(Township township) {
+        if (gates.existsByTownship_IdAndNameIgnoreCase(township.getId(), GATE_NAME)) {
             return;
         }
         Gate gate = new Gate();
+        gate.setTownship(township);
         gate.setName(GATE_NAME);
         gates.save(gate);
     }
 
-    private boolean seedStaff(SeedAccount account, String password) {
-        if (users.existsByLoginId(account.loginId())) {
+    private boolean seedStaff(Township township, SeedAccount account, String password) {
+        if (users.existsByTownship_IdAndLoginId(township.getId(), account.loginId())) {
             return false;
         }
-        AppUser user = newUser(account.role(), account.loginId(), account.fullName(),
+        AppUser user = newUser(township, account.role(), account.loginId(), account.fullName(),
                 account.phone(), password);
         users.save(user);
         return true;
     }
 
-    private boolean seedResident(String loginId, Flat flat, String password) {
-        if (users.existsByLoginId(loginId)) {
+    private boolean seedResident(Township township, String loginId, Flat flat, String password) {
+        if (users.existsByTownship_IdAndLoginId(township.getId(), loginId)) {
             return false;
         }
-        AppUser user = newUser(UserRole.RESIDENT, loginId, RESIDENT.fullName(), RESIDENT.phone(),
-                password);
+        AppUser user = newUser(township, UserRole.RESIDENT, loginId, RESIDENT.fullName(),
+                RESIDENT.phone(), password);
         user.setFlat(flat);
         users.save(user);
         return true;
     }
 
-    private AppUser newUser(UserRole role, String loginId, String fullName, String phone,
-                            String password) {
+    private AppUser newUser(Township township, UserRole role, String loginId, String fullName,
+                            String phone, String password) {
         // The password was already validated for every candidate account in validateSeedPassword.
         AppUser user = new AppUser();
+        user.setTownship(township);
         user.setRole(role);
         user.setLoginId(loginId);
         user.setFullName(fullName);
-        user.setPhone(phone == null || users.existsByPhone(phone) ? null : phone);
+        user.setPhone(phone == null || users.existsByTownship_IdAndPhone(township.getId(), phone)
+                ? null : phone);
         user.setPasswordHash(passwordEncoder.encode(password));
         // The whole point of a seeded account is that it is ready to use. A forced reset on four
         // fixtures is four password changes before any testing can start.
@@ -257,21 +283,21 @@ public class DevDataSeeder implements ApplicationRunner {
     }
 
     /**
-     * Give the bootstrap admin the same known password, but only while it still carries the
+     * Give a bootstrap account the same known password, but only while it still carries the
      * forced-reset flag it was created with.
      *
-     * <p>An admin who has already chosen their own password is left completely alone — silently
-     * resetting a credential on every restart is exactly the kind of surprise that makes a
+     * <p>An account whose holder has already chosen their own password is left completely alone —
+     * silently resetting a credential on every restart is exactly the kind of surprise that makes a
      * developer distrust their environment.
      */
-    private boolean normaliseBootstrapAdmin(String adminLoginId, String password) {
-        return users.findByLoginId(adminLoginId)
+    private boolean normalise(java.util.Optional<AppUser> maybeAccount, String password) {
+        return maybeAccount
                 .filter(AppUser::isMustResetPassword)
-                .map(admin -> {
-                    admin.setPasswordHash(passwordEncoder.encode(password));
-                    admin.setMustResetPassword(false);
-                    admin.bumpTokenVersion();
-                    users.save(admin);
+                .map(account -> {
+                    account.setPasswordHash(passwordEncoder.encode(password));
+                    account.setMustResetPassword(false);
+                    account.bumpTokenVersion();
+                    users.save(account);
                     return true;
                 })
                 .orElse(false);

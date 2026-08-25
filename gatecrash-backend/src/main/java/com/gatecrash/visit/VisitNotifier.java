@@ -26,6 +26,11 @@ import java.util.UUID;
  * <p>Everything here runs <em>after</em> the business transaction commits, so it re-reads the state
  * it is announcing in its own short read-only transaction. That keeps this class honest: it can only
  * announce what is actually durable.
+ *
+ * <p><b>Tenancy:</b> these methods run on a pool thread with no request behind them, so there is no
+ * {@code TenantContext} to read. Every id they touch was handed to them by the transaction that just
+ * committed -- never resolved from caller input -- so they use the unscoped detail fetch, and the
+ * township is passed in explicitly where a destination needs it.
  */
 @Service
 @RequiredArgsConstructor
@@ -41,7 +46,7 @@ public class VisitNotifier {
     /** Step 4 of the approval loop: tell the routed approver(s) that someone is at the gate. */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public void visitRequested(UUID visitId, List<UUID> approverUserIds) {
-        VisitorLog visit = visits.findDetailedById(visitId).orElse(null);
+        VisitorLog visit = visits.findDetailedByIdUnscoped(visitId).orElse(null);
         if (visit == null) {
             log.warn("Visit {} vanished before notification", visitId);
             return;
@@ -82,7 +87,7 @@ public class VisitNotifier {
         realtime.toGate(gateId, RealtimeEvents.VisitDecidedEvent.of(
                 visitId, gateId, status, visitorName, decidedByName, decidedAt));
 
-        visits.findDetailedById(visitId).ifPresent(visit -> {
+        visits.findDetailedByIdUnscoped(visitId).ifPresent(visit -> {
             UUID guardId = visit.getLoggedBy() == null ? null : visit.getLoggedBy().getId();
             if (guardId == null) {
                 return;
@@ -102,11 +107,15 @@ public class VisitNotifier {
         realtime.toGate(gateId, RealtimeEvents.VisitExpiredEvent.of(visitId, gateId, visitorName));
     }
 
-    /** Live occupancy for the admin dashboard. */
+    /**
+     * Live occupancy for one township's admin dashboards. The count is scoped to the township too --
+     * a platform-wide "currently inside" figure would be meaningless to every admin who saw it.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-    public void occupancyChanged(UUID visitId, VisitStatus status, String visitorName, String gateName) {
-        long inside = visits.countByStatus(VisitStatus.CHECKED_IN);
-        realtime.toAdminInside(RealtimeEvents.OccupancyChangedEvent.of(
+    public void occupancyChanged(UUID townshipId, UUID visitId, VisitStatus status, String visitorName,
+                                 String gateName) {
+        long inside = visits.countByTownship_IdAndStatus(townshipId, VisitStatus.CHECKED_IN);
+        realtime.toAdminInside(townshipId, RealtimeEvents.OccupancyChangedEvent.of(
                 visitId, status, visitorName, gateName, inside, OffsetDateTime.now()));
     }
 }

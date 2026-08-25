@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { backoffDelay } from './client';
 import { destinationsFor, nativeWebSocketUrl, sockJsUrl } from './subscriptions';
-import type { GateId } from '@gatecrash/core';
+import type { GateId, TownshipId } from '@gatecrash/core';
 
 const GATE_A = 'aaaa1111-1111-4111-8111-111111111111' as GateId;
 const GATE_B = 'bbbb2222-2222-4222-8222-222222222222' as GateId;
+const TOWNSHIP = 'cccc3333-3333-4333-8333-333333333333' as TownshipId;
 
 describe('backoff', () => {
   it('climbs from ~1s and caps at 30s', () => {
@@ -37,11 +38,28 @@ describe('subscription registry', () => {
   });
 
   it('gives an admin occupancy, their notifications and any watched gates', () => {
-    expect(destinationsFor('ADMIN', { watchedGateIds: [GATE_A, GATE_B] })).toEqual([
-      '/topic/admin/inside',
+    expect(
+      destinationsFor('ADMIN', { townshipId: TOWNSHIP, watchedGateIds: [GATE_A, GATE_B] }),
+    ).toEqual([
+      `/topic/admin/inside/${TOWNSHIP}`,
       `/topic/gate/${GATE_A}`,
       `/topic/gate/${GATE_B}`,
       '/user/queue/notifications',
+    ]);
+  });
+
+  it('never subscribes to occupancy without a township in context', () => {
+    // The bare `/topic/admin/inside` is not a destination any more; subscribing to it would be
+    // refused by the interceptor, and a refused SUBSCRIBE takes the whole session down.
+    const destinations = destinationsFor('ADMIN', {});
+    expect(destinations).toEqual(['/user/queue/notifications']);
+    expect(destinations.some((d) => d.startsWith('/topic/admin/inside'))).toBe(false);
+  });
+
+  it('gives a super admin nothing until it has picked a township to look at', () => {
+    expect(destinationsFor('SUPER_ADMIN', {})).toEqual([]);
+    expect(destinationsFor('SUPER_ADMIN', { townshipId: TOWNSHIP })).toEqual([
+      `/topic/admin/inside/${TOWNSHIP}`,
     ]);
   });
 
@@ -54,7 +72,9 @@ describe('subscription registry', () => {
   });
 
   it('de-duplicates so a doubly-watched gate does not deliver every frame twice', () => {
-    expect(destinationsFor('ADMIN', { watchedGateIds: [GATE_A, GATE_A] })).toHaveLength(3);
+    expect(
+      destinationsFor('ADMIN', { townshipId: TOWNSHIP, watchedGateIds: [GATE_A, GATE_A] }),
+    ).toHaveLength(3);
   });
 });
 

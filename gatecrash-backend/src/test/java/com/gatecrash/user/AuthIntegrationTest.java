@@ -50,7 +50,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     void loginSucceeds() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", resident.getLoginId(),
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(),
                                 "password", TestDataFactory.PASSWORD))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
@@ -64,13 +64,13 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     void loginFailuresAreIndistinguishable() throws Exception {
         String wrongPassword = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", resident.getLoginId(), "password", "WrongPassw0rd!"))))
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(), "password", "WrongPassw0rd!"))))
                 .andExpect(status().isUnauthorized())
                 .andReturn().getResponse().getContentAsString();
 
         String unknownUser = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", "no-such-account", "password", "WrongPassw0rd!"))))
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", "no-such-account", "password", "WrongPassw0rd!"))))
                 .andExpect(status().isUnauthorized())
                 .andReturn().getResponse().getContentAsString();
 
@@ -87,7 +87,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", resident.getLoginId(),
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(),
                                 "password", TestDataFactory.PASSWORD))))
                 .andExpect(status().isUnauthorized());
     }
@@ -98,14 +98,14 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         for (int attempt = 0; attempt < 5; attempt++) {
             mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(json(Map.of("loginId", resident.getLoginId(), "password", "Wrong" + attempt))))
+                            .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(), "password", "Wrong" + attempt))))
                     .andExpect(status().isUnauthorized());
         }
         // The next attempt is refused before the password is even checked -- note it uses the
         // *correct* password, and still fails.
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", resident.getLoginId(),
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(),
                                 "password", TestDataFactory.PASSWORD))))
                 .andExpect(status().isTooManyRequests());
     }
@@ -215,7 +215,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     private String login() throws Exception {
         String body = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", resident.getLoginId(),
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", resident.getLoginId(),
                                 "password", TestDataFactory.PASSWORD))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

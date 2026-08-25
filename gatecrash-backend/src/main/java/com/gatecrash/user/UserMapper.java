@@ -20,6 +20,7 @@ public class UserMapper {
         return new UserResponse(
                 user.getId(),
                 user.getLoginId(),
+                user.getTownshipId(),
                 user.getFullName(),
                 user.getRole(),
                 user.getPhone(),

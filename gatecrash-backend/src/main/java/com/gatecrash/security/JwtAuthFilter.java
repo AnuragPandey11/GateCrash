@@ -75,6 +75,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 reject(response, request, "TOKEN_REVOKED", "Session has been invalidated. Sign in again.");
                 return;
             }
+            // Suspending or archiving a township takes effect on the very next request, not when the
+            // access token happens to expire. The lifecycle change also bumps every member's token
+            // version, so this is the structural backstop behind that, not the only control.
+            if (!user.isTownshipUsable()) {
+                reject(response, request, "TOWNSHIP_INACTIVE",
+                        "This township is not currently active. Contact your administrator.");
+                return;
+            }
 
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());

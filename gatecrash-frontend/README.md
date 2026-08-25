@@ -16,7 +16,7 @@ gatecrash-frontend/
 │   ├── api/         THE contract layer — client, errors, session, schemas, endpoints, hooks, MSW
 │   └── realtime/    STOMP client, subscription registry, frame → query-cache dispatcher
 ├── apps/
-│   └── admin/       Vite + React SPA for ADMIN
+│   └── admin/       Vite + React SPA for ADMIN (and SUPER_ADMIN)
 └── tools/openapi/   Spec fetch + codegen against a running backend
 ```
 
@@ -41,23 +41,34 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ## Sign in
 
-Under the local profile the backend seeds a usable township on startup — a block, four flats, a
-gate, and one ready-to-use account per role. All of them share one password:
+The backend is **multi-tenant**, so sign-in takes a **township code** as well as a login id — login
+ids are unique only within a township, and every township with a block A mints an `A-101-1`.
 
-| Login ID | Role | Where it signs in |
-|---|---|---|
-| `admin` | `ADMIN` | **This app** — http://localhost:5173 |
-| `guard-01` | `GUARD` | Mobile app (not built yet) |
-| `sales-01` | `SALES` | Mobile app (not built yet) |
-| `A-101-1` | `RESIDENT` | Mobile app (not built yet) |
+Under the local profile the backend seeds a usable township on startup — the `DEFAULT` township, a
+block, four flats, a gate, and one ready-to-use account per role. All of them share one password:
+
+| Township code | Login ID | Role | Where it signs in |
+|---|---|---|---|
+| *(leave blank)* | `superadmin` | `SUPER_ADMIN` | **This app** — creates and manages townships |
+| `DEFAULT` | `admin` | `ADMIN` | **This app** — http://localhost:5173 |
+| `DEFAULT` | `guard-01` | `GUARD` | Mobile app (not built yet) |
+| `DEFAULT` | `sales-01` | `SALES` | Mobile app (not built yet) |
+| `DEFAULT` | `A-101-1` | `RESIDENT` | Mobile app (not built yet) |
 
 ```
 password: Township#2026
 ```
 
-Use `admin` for the dashboard. The other three exist so the admin screens have real data to show —
-a resident to route a visit to, a sales agent for the on-duty dropdown, a guard to log arrivals —
-and so the mobile app has accounts waiting when it lands.
+Use `DEFAULT` + `admin` for the dashboard. The other three exist so the admin screens have real data
+to show — a resident to route a visit to, a sales agent for the on-duty dropdown, a guard to log
+arrivals — and so the mobile app has accounts waiting when it lands.
+
+`superadmin` is the platform operator. It belongs to no township, so it signs in with the township
+code field **blank** — which is why that field is optional and why a blank value is submitted as
+absent rather than as an empty string. It lands on **Platform** (`/townships`), where it can onboard
+a township, appoint or remove its administrators, suspend, archive and restore it, and pick which
+township to work inside. Until it picks one, the township-scoped nav is hidden — every one of those
+screens would answer `422 TOWNSHIP_CONTEXT_REQUIRED` without a township to resolve against.
 
 Seeded accounts skip the forced password change, so `admin` lands straight on the occupancy board.
 The other three roles are refused by this app by design: signing in as `A-101-1` here gets the
@@ -67,10 +78,11 @@ Seeding is local/test only and the backend refuses to start if it is ever enable
 [gatecrash-backend/README.md](../gatecrash-backend/README.md#seeded-development-accounts) for the
 full rules, how to change the password, and what happens on a database with no seeding.
 
-If you are pointing at a backend **without** seeding, the V1 migration creates only an `admin` row
-with an unusable password; set `GATECRASH_BOOTSTRAP_ADMIN_PASSWORD` before its first boot or read
-the generated one from the log. There `mustResetPassword` is true, so this app will force a
-password change before anything else loads — which is the flow `/change-password` exists for.
+If you are pointing at a backend **without** seeding, the migrations create two accounts with an
+unusable password — `superadmin` and `DEFAULT`/`admin`; set
+`GATECRASH_BOOTSTRAP_SUPER_ADMIN_PASSWORD` / `GATECRASH_BOOTSTRAP_ADMIN_PASSWORD` before its first
+boot, or read the generated ones from the log. There `mustResetPassword` is true, so this app will
+force a password change before anything else loads — which is the flow `/change-password` exists for.
 
 ## Commands
 
@@ -96,8 +108,19 @@ pnpm --filter @gatecrash/admin exec vitest run -t "password-reset lockout"
 ## The parts worth knowing before changing anything
 
 **Nothing outside `packages/api` talks to the backend.** A `no-restricted-globals: fetch` lint rule
-enforces it. That is what keeps correlation ids, the auth header and the single-flight refresh true
-everywhere rather than per call site.
+enforces it. That is what keeps correlation ids, the auth header, the single-flight refresh and the
+`X-Township-Id` tenant header true everywhere rather than per call site.
+
+**The client never decides which township a request acts in.** For every role but `SUPER_ADMIN` the
+server takes it from the account row and refuses a header that disagrees (`403 TOWNSHIP_MISMATCH`),
+so `ApiClient` sends `X-Township-Id` only when the session has no township of its own. It reads the
+value fresh per request from `useSessionStore().actingTownshipId`, so switching township takes effect
+on the next call rather than on a reload. No feature code should ever set that header by hand.
+
+**The occupancy topic is keyed by township** (`/topic/admin/inside/{townshipId}`). Subscribing without
+one is refused by the backend's STOMP interceptor, and a refused SUBSCRIBE kills the whole session
+rather than just that subscription — which is why `destinationsFor` returns no occupancy destination
+at all when there is no township in context, instead of guessing.
 
 **Only one `/auth/refresh` may ever be in flight.** Refresh tokens are one-time use and reuse
 revokes the whole family server-side, so two concurrent 401s that each refresh would sign the user
@@ -159,3 +182,7 @@ Client-side, from the spec's own list (§15) plus what running against a live ba
   over WebSocket while the tab is open (§7.3).
 - **Single-node WebSocket broker** on the backend, so horizontal scaling needs a relay before the
   connection pill means anything across instances.
+- **The super admin console is deliberately minimal.** `/townships` covers the lifecycle, township
+  selection and admin management. Not built: a township detail page, a screen for `/super/admins`
+  (managing peer platform operators — the endpoints are implemented and typed), and an audit-log
+  viewer. See FRONTEND.md §8.9.

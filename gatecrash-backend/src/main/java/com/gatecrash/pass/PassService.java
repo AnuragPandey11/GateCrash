@@ -10,6 +10,7 @@ import com.gatecrash.common.exception.ForbiddenException;
 import com.gatecrash.common.exception.GoneException;
 import com.gatecrash.common.exception.NotFoundException;
 import com.gatecrash.common.exception.TooManyRequestsException;
+import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.config.AppProperties;
 import com.gatecrash.device.DeviceService;
 import com.gatecrash.pass.dto.PassDtos.CreatePassRequest;
@@ -64,6 +65,12 @@ import java.util.UUID;
  *       must not both succeed against a single-use pass.</li>
  *   <li><b>Failures are indistinguishable.</b> Wrong PIN, revoked pass and expired pass all return
  *       the same message, so the gate keypad cannot be used to probe which PINs exist.</li>
+ *   <li><b>Resolution is confined to the guard's township.</b> Both the QR token and the PIN lookup
+ *       are narrowed by tenant before a candidate is ever considered. Without that, a six-digit PIN
+ *       -- or a photographed QR code -- from one community would be a working key at another's gate,
+ *       and PIN collisions across a whole platform are not a hypothetical: a million-value space
+ *       shared by many townships makes them routine. It is also what keeps the candidate list to the
+ *       handful the bcrypt-verify loop below assumes.</li>
  * </ul>
  */
 @Service
@@ -110,6 +117,9 @@ public class PassService {
         String pin = passwordGenerator.generateNumericPin(properties.pass().pinLength());
 
         PreApproval pass = new PreApproval();
+        // Taken from the creator's own account, not from the request context, so a pass can only
+        // ever belong to the township of the person who minted it.
+        pass.setTownship(creator.getTownship());
         pass.setCreatedBy(creator);
         // Derived from the caller's role, never from the request body.
         pass.setApproverKind(caller.getRole() == UserRole.SALES ? ApproverKind.SALES : ApproverKind.RESIDENT);
@@ -147,7 +157,7 @@ public class PassService {
     @PreAuthorize("hasAnyRole('RESIDENT','SALES')")
     @Transactional
     public PassResponse revoke(UUID passId) {
-        PreApproval pass = passes.findByIdForUpdate(passId)
+        PreApproval pass = passes.findByIdForUpdate(passId, TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Pass", passId));
 
         // Ownership re-check: a valid RESIDENT token does not entitle you to another flat's passes.
@@ -183,8 +193,11 @@ public class PassService {
 
         throttleRedemption(guard.getId());
         Gate gate = township.requireGate(request.gateId());
+        UUID townshipId = gate.getTownshipId();
 
-        PreApproval pass = byQr ? resolveByQr(request.qrToken()) : resolveByPin(request.pin());
+        PreApproval pass = byQr
+                ? resolveByQr(request.qrToken(), townshipId)
+                : resolveByPin(request.pin(), townshipId);
 
         OffsetDateTime now = OffsetDateTime.now();
         if (!pass.isRedeemableAt(now)) {
@@ -217,18 +230,19 @@ public class PassService {
         String gateName = gate.getName();
         afterCommit.execute(() -> {
             notifyOwnerOfEntry(ownerId, visitorName, gateName, visitId);
-            visitNotifier.occupancyChanged(visitId, VisitStatus.CHECKED_IN, visitorName, gateName);
+            visitNotifier.occupancyChanged(townshipId, visitId, VisitStatus.CHECKED_IN, visitorName,
+                    gateName);
         });
 
         return new RedeemPassResponse(pass.getId(), visitMapper.toResponse(visit),
                 Math.max(0, pass.getMaxUses() - pass.getUseCount()));
     }
 
-    private PreApproval resolveByQr(UUID qrToken) {
-        PreApproval candidate = passes.findByQrToken(qrToken)
+    private PreApproval resolveByQr(UUID qrToken, UUID townshipId) {
+        PreApproval candidate = passes.findByQrTokenAndTownship_Id(qrToken, townshipId)
                 .orElseThrow(() -> new NotFoundException(REDEEM_FAILURE_MESSAGE));
         // Re-read under a write lock so the use-count increment is atomic.
-        return passes.findByIdForUpdate(candidate.getId())
+        return passes.findByIdForUpdate(candidate.getId(), townshipId)
                 .orElseThrow(() -> new NotFoundException(REDEEM_FAILURE_MESSAGE));
     }
 
@@ -236,11 +250,12 @@ public class PassService {
      * PIN resolution: narrow by the indexed HMAC, then bcrypt-verify each candidate. The bcrypt check
      * is what authorises -- the index only decides which handful of rows to look at.
      */
-    private PreApproval resolveByPin(String pin) {
-        List<PreApproval> candidates = passes.findActiveByPinLookup(pinHasher.lookupValue(pin));
+    private PreApproval resolveByPin(String pin, UUID townshipId) {
+        List<PreApproval> candidates =
+                passes.findActiveByPinLookup(pinHasher.lookupValue(pin), townshipId);
         for (PreApproval candidate : candidates) {
             if (passwordEncoder.matches(pin, candidate.getPinHash())) {
-                return passes.findByIdForUpdate(candidate.getId())
+                return passes.findByIdForUpdate(candidate.getId(), townshipId)
                         .orElseThrow(() -> new NotFoundException(REDEEM_FAILURE_MESSAGE));
             }
         }
@@ -250,6 +265,7 @@ public class PassService {
     private VisitorLog buildCheckedInVisit(PreApproval pass, Gate gate, UUID guardId) {
         AppUser creator = pass.getCreatedBy();
         VisitorLog visit = new VisitorLog();
+        visit.setTownship(gate.getTownship());
         visit.setGate(gate);
         visit.setLoggedBy(users.getReferenceById(guardId));
         visit.setVisitorName(pass.getVisitorName() == null ? "Pass holder" : pass.getVisitorName());

@@ -39,9 +39,15 @@ public final class UserDtos {
             @Email @Size(max = 200) String email) {
     }
 
-    /** The generated password appears here and nowhere else, ever. */
+    /**
+     * The generated password appears here and nowhere else, ever.
+     *
+     * <p>{@code townshipId} is echoed back because {@code loginId} alone no longer identifies the
+     * account -- the credential handed to the user is the pair, and the client needs both to print a
+     * usable sign-in card.
+     */
     public record CreatedUserResponse(UUID id, String loginId, String fullName, UserRole role,
-                                      String generatedPassword) {
+                                      UUID townshipId, String generatedPassword) {
     }
 
     public record UpdateUserRequest(
@@ -54,6 +60,7 @@ public final class UserDtos {
     public record UserResponse(
             UUID id,
             String loginId,
+            UUID townshipId,
             String fullName,
             UserRole role,
             String phone,

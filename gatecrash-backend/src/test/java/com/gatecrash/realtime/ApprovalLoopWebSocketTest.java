@@ -160,7 +160,8 @@ class ApprovalLoopWebSocketTest {
         StompSession session = connect(resident);
         assertThat(session.isConnected()).isTrue();
 
-        session.subscribe("/topic/admin/inside", collector(new CompletableFuture<>()));
+        session.subscribe(RealtimeService.TOPIC_ADMIN_INSIDE_PREFIX + resident.getTownshipId(),
+                collector(new CompletableFuture<>()));
 
         // The interceptor aborts the frame; the broker responds with ERROR and closes the session.
         // Asserting on teardown is stronger than asserting on a missing message -- it proves the
@@ -176,7 +177,8 @@ class ApprovalLoopWebSocketTest {
         AppUser admin = data.admin();
         StompSession session = connect(admin);
 
-        session.subscribe("/topic/admin/inside", collector(new CompletableFuture<>()));
+        session.subscribe(RealtimeService.TOPIC_ADMIN_INSIDE_PREFIX + admin.getTownshipId(),
+                collector(new CompletableFuture<>()));
 
         // Still connected a moment later: the subscription was accepted.
         Thread.sleep(500);
@@ -231,15 +233,18 @@ class ApprovalLoopWebSocketTest {
     }
 
     /**
-     * Runs a service call under a real {@code SecurityContext}, so {@code @PreAuthorize} and the
-     * ownership re-checks execute exactly as they would behind a controller.
+     * Runs a service call under a real {@code SecurityContext} and a real tenant context, so
+     * {@code @PreAuthorize}, the ownership re-checks and the township scoping all execute exactly as
+     * they would behind a controller. These cases call the service directly, so both contexts are
+     * established here in place of the filters that would normally do it.
      */
     private <T> T asUser(AppUser user, java.util.function.Supplier<T> action) {
         AppUserDetails principal = AppUserDetails.from(user);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
         try {
-            return action.get();
+            return com.gatecrash.common.tenant.TenantContext.callAs(
+                    principal.getTownshipId(), action);
         } finally {
             SecurityContextHolder.clearContext();
         }

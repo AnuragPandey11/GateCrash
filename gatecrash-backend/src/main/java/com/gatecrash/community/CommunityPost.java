@@ -26,6 +26,10 @@ public class CommunityPost {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    /** The tenant whose feed this post appears in. See the note on {@code Notification}. */
+    @Column(name = "township_id", nullable = false, updatable = false)
+    private UUID townshipId;
+
     @Column(name = "author_id", nullable = false, updatable = false)
     private UUID authorId;
 

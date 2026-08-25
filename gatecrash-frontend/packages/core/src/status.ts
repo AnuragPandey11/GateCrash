@@ -96,6 +96,12 @@ export const NOTIF_STATUS_META: Record<NotifStatus, StatusMeta> = {
 };
 
 export const ROLE_META: Record<UserRole, StatusMeta> = {
+  SUPER_ADMIN: {
+    label: 'Super Admin',
+    labelKey: 'role.SUPER_ADMIN',
+    tone: 'danger',
+    icon: 'shield-alert',
+  },
   ADMIN: { label: 'Admin', labelKey: 'role.ADMIN', tone: 'primary', icon: 'shield' },
   GUARD: { label: 'Guard', labelKey: 'role.GUARD', tone: 'info', icon: 'shield-check' },
   RESIDENT: { label: 'Resident', labelKey: 'role.RESIDENT', tone: 'muted', icon: 'house' },

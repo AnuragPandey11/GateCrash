@@ -6,6 +6,7 @@ import type {
   GateId,
   InboxItemId,
   PostId,
+  TownshipId,
   UserId,
   VisitId,
 } from '@gatecrash/core';
@@ -16,6 +17,11 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
+import type {
+  CreateTownshipBody,
+  TownshipAdminBody,
+  UpdateTownshipBody,
+} from '../endpoints/platform';
 import type { UserFilters, VisitFilters } from '../filters';
 import { PAGE_DEFAULTS, type PageArgs } from '../pagination';
 import type {
@@ -23,6 +29,7 @@ import type {
   CreatePostRequest,
   CreateUserRequest,
   CreateVisitRequest,
+  CreatedTownshipResponse,
   CreatedUserResponse,
   ResetPasswordResponse,
   UpdateUserRequest,
@@ -433,5 +440,121 @@ export function useDeleteGate() {
   return useMutation({
     mutationFn: (id: GateId) => api.township.deleteGate(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.admin.gates }),
+  });
+}
+
+
+// ── Platform / SUPER_ADMIN (§8.9) ───────────────────────────────────────────────────────────
+
+/**
+ * These are the only hooks whose data is not scoped to the acting township — they act *on*
+ * townships, from outside any of them, and need no `X-Township-Id`.
+ *
+ * Everything here answers `403` for any role but `SUPER_ADMIN`, which is the check that counts;
+ * the `enabled` flags below are only there to keep a township admin's dashboard from firing a
+ * request it is guaranteed to be refused.
+ */
+export function useTownships(
+  page: PageArgs = { page: 1, size: PAGE_DEFAULTS.users },
+  includeArchived = false,
+  enabled = true,
+) {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: qk.platform.townships(page, includeArchived),
+    queryFn: ({ signal }) => api.platform.listTownships(page, includeArchived, signal),
+    placeholderData: (previous) => previous,
+    enabled,
+  });
+}
+
+export function useTownshipAdmins(id: TownshipId | null) {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: qk.platform.townshipAdmins((id ?? '') as TownshipId),
+    queryFn: ({ signal }) => api.platform.listTownshipAdmins(id as TownshipId, signal),
+    enabled: Boolean(id),
+  });
+}
+
+/**
+ * Onboards a township and its first admin. The generated password comes back through the mutation
+ * result only and is never cached — same rule as `useCreateUser` (§14.3).
+ */
+export function useCreateTownship() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation<CreatedTownshipResponse, Error, CreateTownshipBody>({
+    mutationFn: (body) => api.platform.createTownship(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipsAll });
+    },
+  });
+}
+
+export function useUpdateTownship() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: TownshipId; body: UpdateTownshipBody }) =>
+      api.platform.updateTownship(id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipsAll });
+    },
+  });
+}
+
+/**
+ * Suspend / archive / restore.
+ *
+ * Archive carries `confirmCode` because the server requires the township's own code back — the one
+ * operation on the platform that takes an entire community offline in a single request.
+ */
+export function useTownshipLifecycle() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: qk.platform.townshipsAll });
+  };
+
+  return {
+    suspend: useMutation({
+      mutationFn: (id: TownshipId) => api.platform.suspendTownship(id),
+      onSuccess: invalidate,
+    }),
+    archive: useMutation({
+      mutationFn: ({ id, confirmCode }: { id: TownshipId; confirmCode: string }) =>
+        api.platform.archiveTownship(id, confirmCode),
+      onSuccess: invalidate,
+    }),
+    restore: useMutation({
+      mutationFn: (id: TownshipId) => api.platform.restoreTownship(id),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useAddTownshipAdmin() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation<CreatedUserResponse, Error, { id: TownshipId; body: TownshipAdminBody }>({
+    mutationFn: ({ id, body }) => api.platform.addTownshipAdmin(id, body),
+    onSuccess: (_result, { id }) => {
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipAdmins(id) });
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipsAll });
+    },
+  });
+}
+
+export function useRemoveTownshipAdmin() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: TownshipId; userId: UserId }) =>
+      api.platform.removeTownshipAdmin(id, userId),
+    onSuccess: (_result, { id }) => {
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipAdmins(id) });
+      void qc.invalidateQueries({ queryKey: qk.platform.townshipsAll });
+    },
   });
 }

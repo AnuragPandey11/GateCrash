@@ -12,6 +12,8 @@ import type {
   PassStatus,
   PostId,
   QrToken,
+  TownshipId,
+  TownshipStatus,
   UserId,
   UserRole,
   VisitId,
@@ -64,8 +66,16 @@ export const loginResponseSchema = z.object({
   role: userRoleSchema,
   userId: z.string().uuid(),
   fullName: z.string(),
+  // Null for a SUPER_ADMIN, which belongs to no township. The client needs all three: the id to
+  // scope its own queries, and the code and name to show whose township this session is in.
+  townshipId: nullish(z.string().uuid()),
+  townshipCode: nullish(z.string()),
+  townshipName: nullish(z.string()),
 });
-export type LoginResponse = Omit<z.infer<typeof loginResponseSchema>, 'userId'> & { userId: UserId };
+export type LoginResponse = Omit<z.infer<typeof loginResponseSchema>, 'userId' | 'townshipId'> & {
+  userId: UserId;
+  townshipId: TownshipId | null;
+};
 
 export const meResponseSchema = z.object({
   id: z.string().uuid(),
@@ -77,10 +87,17 @@ export const meResponseSchema = z.object({
   flatId: nullish(z.string().uuid()),
   flatNumber: nullish(z.string()),
   blockName: nullish(z.string()),
+  townshipId: nullish(z.string().uuid()),
+  townshipCode: nullish(z.string()),
+  townshipName: nullish(z.string()),
 });
-export type MeResponse = Omit<z.infer<typeof meResponseSchema>, 'id' | 'flatId'> & {
+export type MeResponse = Omit<
+  z.infer<typeof meResponseSchema>,
+  'id' | 'flatId' | 'townshipId'
+> & {
   id: UserId;
   flatId: FlatId | null;
+  townshipId: TownshipId | null;
 };
 
 export const visitResponseSchema = z.object({
@@ -160,6 +177,8 @@ export interface OccupancyResponse {
 export interface UserResponse {
   id: UserId;
   loginId: string;
+  /** The tenant this account belongs to. Always present — only a SUPER_ADMIN has none. */
+  townshipId: TownshipId;
   fullName: string;
   role: UserRole;
   phone?: string | null;
@@ -173,13 +192,54 @@ export interface UserResponse {
   createdAt: string;
 }
 
-/** `generatedPassword` is returned exactly once and must never leave component state (§14.3). */
+/**
+ * `generatedPassword` is returned exactly once and must never leave component state (§14.3).
+ *
+ * `townshipId` is echoed back because `loginId` alone no longer identifies the account — the
+ * credential handed over is the pair, so a sign-in card has to print the township's code too.
+ * It is `null` for a super admin, who signs in without one.
+ */
 export interface CreatedUserResponse {
   id: UserId;
   loginId: string;
   fullName: string;
   role: UserRole;
+  townshipId: TownshipId | null;
   generatedPassword: string;
+}
+
+// ── Platform (super admin) ──────────────────────────────────────────────────────────────────
+
+export interface TownshipResponse {
+  id: TownshipId;
+  code: string;
+  name: string;
+  status: TownshipStatus;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  activeUserCount: number;
+  activeAdminCount: number;
+  blockCount: number;
+  gateCount: number;
+  createdAt: string;
+  archivedAt?: string | null;
+}
+
+/** `admin.generatedPassword` is the one-time credential for the township's first administrator. */
+export interface CreatedTownshipResponse {
+  township: TownshipResponse;
+  admin: CreatedUserResponse;
+}
+
+export interface SuperAdminResponse {
+  id: UserId;
+  loginId: string;
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  active: boolean;
+  mustResetPassword: boolean;
+  createdAt: string;
 }
 
 export interface ResetPasswordResponse {

@@ -26,13 +26,23 @@ public class RealtimeService {
     private static final Logger log = LoggerFactory.getLogger(RealtimeService.class);
 
     public static final String TOPIC_GATE_PREFIX = "/topic/gate/";
-    public static final String TOPIC_ADMIN_INSIDE = "/topic/admin/inside";
+    /**
+     * Occupancy is per township, so the tenant id is part of the destination rather than a field in
+     * the payload. A single shared {@code /topic/admin/inside} would deliver every township's
+     * movements to every township's dashboard, and no amount of client-side filtering makes that
+     * safe -- the frame has already left the server.
+     */
+    public static final String TOPIC_ADMIN_INSIDE_PREFIX = "/topic/admin/inside/";
     public static final String QUEUE_VISITS = "/queue/visits";
     public static final String QUEUE_NOTIFICATIONS = "/queue/notifications";
 
     private final SimpMessagingTemplate messaging;
 
-    /** Broadcasts to every guard tablet watching this gate. */
+    /**
+     * Broadcasts to every guard tablet watching this gate. Gate ids are UUIDs and tenant-unique, so
+     * the destination is already tenant-private; {@code StompAuthChannelInterceptor} is what stops a
+     * guard subscribing to a gate id belonging to another township.
+     */
     public void toGate(UUID gateId, Object event) {
         send(TOPIC_GATE_PREFIX + gateId, event);
     }
@@ -46,8 +56,9 @@ public class RealtimeService {
         }
     }
 
-    public void toAdminInside(Object event) {
-        send(TOPIC_ADMIN_INSIDE, event);
+    /** Broadcasts to the admin dashboards of one township only. */
+    public void toAdminInside(UUID townshipId, Object event) {
+        send(TOPIC_ADMIN_INSIDE_PREFIX + townshipId, event);
     }
 
     private void send(String destination, Object event) {

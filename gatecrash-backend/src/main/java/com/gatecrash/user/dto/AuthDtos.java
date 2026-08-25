@@ -17,7 +17,16 @@ public final class AuthDtos {
     private AuthDtos() {
     }
 
+    /**
+     * Login is {@code (townshipCode, loginId, password)}.
+     *
+     * <p>{@code townshipCode} identifies the namespace the login id lives in, because login ids are
+     * only unique within a township -- every township with a block A has an {@code A-101-1}. It is
+     * optional for exactly one reason: a {@code SUPER_ADMIN} belongs to no township, so it signs in
+     * with the code omitted.
+     */
     public record LoginRequest(
+            @Size(max = 32) String townshipCode,
             @NotBlank @Size(max = 64) String loginId,
             @NotBlank @Size(max = 128) String password) {
     }
@@ -30,7 +39,11 @@ public final class AuthDtos {
             boolean mustResetPassword,
             UserRole role,
             UUID userId,
-            String fullName) {
+            String fullName,
+            /** Null for a SUPER_ADMIN; the tenant every other session is bound to. */
+            UUID townshipId,
+            String townshipCode,
+            String townshipName) {
     }
 
     public record RefreshRequest(@NotBlank @Size(max = 512) String refreshToken) {
@@ -54,6 +67,9 @@ public final class AuthDtos {
             boolean onDuty,
             UUID flatId,
             String flatNumber,
-            String blockName) {
+            String blockName,
+            UUID townshipId,
+            String townshipCode,
+            String townshipName) {
     }
 }

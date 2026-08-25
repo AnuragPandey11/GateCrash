@@ -1,5 +1,7 @@
+import { isPlatformOperator } from '@gatecrash/core';
 import {
   Building2,
+  Globe,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -24,7 +26,8 @@ import { Button } from './ui/button';
  * monitor is unreadable, not impressive.
  */
 
-const NAV = [
+/** Township-scoped screens. Every one of these needs an acting township to resolve against. */
+const TOWNSHIP_NAV = [
   { to: '/occupancy', key: 'nav.occupancy', icon: LayoutDashboard },
   { to: '/visits', key: 'nav.visits', icon: ScrollText },
   { to: '/notifications', key: 'nav.notifications', icon: Megaphone },
@@ -33,10 +36,24 @@ const NAV = [
   { to: '/township', key: 'nav.township', icon: Building2 },
 ] as const;
 
+/** The platform console. Acts *on* townships, so it needs none selected. */
+const PLATFORM_NAV = { to: '/townships', key: 'nav.townships', icon: Globe } as const;
+
 export function AppShell() {
   const { t } = useTranslation();
   const me = useSessionStore((s) => s.me);
+  const actingTownshipId = useSessionStore((s) => s.actingTownshipId);
   const [signingOut, setSigningOut] = useState(false);
+
+  const platformOperator = me ? isPlatformOperator(me.role) : false;
+
+  // A super admin with no township selected would see six nav items that all answer
+  // 422 TOWNSHIP_CONTEXT_REQUIRED. Hiding them until one is chosen is the honest rendering of
+  // what the server will actually accept — the console is the way in.
+  const nav = [
+    ...(platformOperator ? [PLATFORM_NAV] : []),
+    ...(platformOperator && !actingTownshipId ? [] : TOWNSHIP_NAV),
+  ];
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -46,7 +63,7 @@ export function AppShell() {
         </div>
 
         <nav aria-label={t('nav.primary')} className="flex-1 space-y-0.5 p-2">
-          {NAV.map(({ to, key, icon: Icon }) => (
+          {nav.map(({ to, key, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -68,11 +85,17 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-end gap-3 border-b border-border bg-surface px-4">
+          {/* Which township this session is acting in. Shown to a platform operator because it is
+              the only thing that makes the screens below unambiguous — an admin has exactly one and
+              never needs telling. */}
+          {platformOperator ? <ActingTownship townshipId={actingTownshipId} /> : null}
           <ConnectionPill />
           <ThemeToggle />
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium leading-tight text-text">{me?.fullName}</p>
-            <p className="text-xs leading-tight text-text-muted">{me?.loginId}</p>
+            <p className="text-xs leading-tight text-text-muted">
+              {me?.townshipCode ? `${me.townshipCode} / ${me.loginId}` : me?.loginId}
+            </p>
           </div>
           <Button
             variant="ghost"
@@ -93,7 +116,7 @@ export function AppShell() {
           aria-label={t('nav.primary')}
           className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-2 py-1 md:hidden"
         >
-          {NAV.map(({ to, key, icon: Icon }) => (
+          {nav.map(({ to, key, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -121,6 +144,31 @@ export function AppShell() {
 }
 
 /** Page heading used by every route, so titles and spacing stay identical across screens. */
+/**
+ * The acting-township chip.
+ *
+ * It links to the console rather than opening a picker: switching township changes what every
+ * screen behind it means, so it deserves the deliberate step of going to the list and choosing,
+ * not a dropdown that can be brushed past.
+ */
+function ActingTownship({ townshipId }: { townshipId: string | null }) {
+  const { t } = useTranslation();
+  return (
+    <NavLink
+      to="/townships"
+      className={cn(
+        'hidden items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium sm:flex',
+        townshipId
+          ? 'border-border bg-surface-raised text-text-muted'
+          : 'border-warning/40 bg-warning/10 text-warning',
+      )}
+    >
+      <Globe className="size-3" aria-hidden />
+      {townshipId ? t('townships.acting') : t('townships.actingNone')}
+    </NavLink>
+  );
+}
+
 export function PageHeader({
   title,
   description,

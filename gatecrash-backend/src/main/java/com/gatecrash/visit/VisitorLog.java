@@ -3,6 +3,7 @@ package com.gatecrash.visit;
 import com.gatecrash.pass.PreApproval;
 import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
+import com.gatecrash.township.Township;
 import com.gatecrash.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -42,6 +43,17 @@ public class VisitorLog {
     @UuidGenerator
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
+
+    /**
+     * The tenant. Redundant with {@code gate.township} in the happy path -- and that is the point:
+     * the composite foreign keys {@code visit_gate_same_township}, {@code visit_guard_same_township},
+     * {@code visit_approver_same_township}, {@code visit_flat_same_township} and
+     * {@code visit_pass_same_township} all pin their target to this column, so a visit that mixed two
+     * townships could not be written at all.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "township_id", nullable = false, updatable = false)
+    private Township township;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "gate_id", nullable = false, updatable = false)
@@ -122,6 +134,10 @@ public class VisitorLog {
     @Version
     @Column(name = "version", nullable = false)
     private long version;
+
+    public UUID getTownshipId() {
+        return township == null ? null : township.getId();
+    }
 
     public UUID getApproverId() {
         return approver == null ? null : approver.getId();

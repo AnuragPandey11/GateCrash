@@ -8,6 +8,7 @@ import com.gatecrash.common.exception.BusinessValidationException;
 import com.gatecrash.common.exception.ConflictException;
 import com.gatecrash.common.exception.ForbiddenException;
 import com.gatecrash.common.exception.NotFoundException;
+import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.AppUserDetails;
 import com.gatecrash.security.SecurityUtils;
 import com.gatecrash.township.Flat;
@@ -44,6 +45,12 @@ import java.util.UUID;
  *       rejected visit cannot be flipped to approved by replaying a request.</li>
  * </ol>
  *
+ * <p>Underneath all three sits the tenant boundary: every lookup here resolves by
+ * {@code (id, townshipId)}, so a visit id belonging to another township is a 404 before any of the
+ * checks above even run. And because {@code visitor_log} carries composite foreign keys back to its
+ * gate, guard, approver, flat and pass, a visit that mixed two townships could not be persisted even
+ * if all three layers were bypassed.
+ *
  * <p>Every transition takes a pessimistic row lock, writes an audit row inside the same transaction,
  * and dispatches its notifications only after that transaction commits.
  */
@@ -71,9 +78,13 @@ public class VisitService {
     @Transactional
     public VisitResponse createVisit(CreateVisitRequest request) {
         AppUserDetails guard = SecurityUtils.currentUser();
+        // Resolved within the caller's township, so a gate id from elsewhere is a 404, not a route.
         Gate gate = township.requireGate(request.gateId());
 
         VisitorLog visit = new VisitorLog();
+        // Taken from the gate rather than from the context, so the visit's tenant and its gate's
+        // tenant are the same value by construction, not by coincidence.
+        visit.setTownship(gate.getTownship());
         visit.setGate(gate);
         visit.setLoggedBy(users.getReferenceById(guard.getId()));
         visit.setVisitorName(request.visitorName().trim());
@@ -109,7 +120,8 @@ public class VisitService {
             throw new BusinessValidationException("SALES_AGENT_REQUIRED",
                     "salesAgentId is required for CLIENT visits.");
         }
-        AppUser agent = users.findById(request.salesAgentId())
+        AppUser agent = users
+                .findByIdAndTownship_Id(request.salesAgentId(), TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Sales agent", request.salesAgentId()));
 
         if (agent.getRole() != UserRole.SALES || !agent.isActive()) {
@@ -213,12 +225,14 @@ public class VisitService {
      */
     @Transactional(readOnly = true)
     public VisitResponse get(UUID visitId) {
-        VisitorLog visit = visits.findDetailedById(visitId)
+        VisitorLog visit = visits.findDetailedById(visitId, TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Visit", visitId));
 
         AppUserDetails caller = SecurityUtils.currentUser();
         boolean permitted = switch (caller.getRole()) {
-            case ADMIN, GUARD -> true;
+            // SUPER_ADMIN reaches this only through a township it named explicitly, and the lookup
+            // above has already confined the row to that township.
+            case SUPER_ADMIN, ADMIN, GUARD -> true;
             case RESIDENT, SALES -> isApprover(visit, caller);
         };
         if (!permitted) {
@@ -250,7 +264,8 @@ public class VisitService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public List<VisitResponse> currentlyInside() {
-        return visits.findByStatusOrderByCheckedInAtDesc(VisitStatus.CHECKED_IN).stream()
+        return visits.findByTownship_IdAndStatusOrderByCheckedInAtDesc(
+                        TenantContext.requireTownshipId(), VisitStatus.CHECKED_IN).stream()
                 .map(mapper::toResponse)
                 .toList();
     }
@@ -258,7 +273,8 @@ public class VisitService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public long insideCount() {
-        return visits.countByStatus(VisitStatus.CHECKED_IN);
+        return visits.countByTownship_IdAndStatus(TenantContext.requireTownshipId(),
+                VisitStatus.CHECKED_IN);
     }
 
     // ----- internals --------------------------------------------------------------------------
@@ -272,7 +288,7 @@ public class VisitService {
     }
 
     private VisitorLog lockVisit(UUID visitId) {
-        return visits.findByIdForUpdate(visitId)
+        return visits.findByIdForUpdate(visitId, TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Visit", visitId));
     }
 
@@ -311,11 +327,13 @@ public class VisitService {
     }
 
     private void publishOccupancy(VisitorLog visit) {
+        UUID townshipId = visit.getTownshipId();
         UUID visitId = visit.getId();
         VisitStatus status = visit.getStatus();
         String visitorName = visit.getVisitorName();
         String gateName = visit.getGate().getName();
-        afterCommit.execute(() -> notifier.occupancyChanged(visitId, status, visitorName, gateName));
+        afterCommit.execute(() ->
+                notifier.occupancyChanged(townshipId, visitId, status, visitorName, gateName));
     }
 
     private String blankToNull(String value) {

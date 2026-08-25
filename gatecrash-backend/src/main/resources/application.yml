@@ -105,8 +105,13 @@ app:
       max-attempts: 10
       window-minutes: 1
   bootstrap:
+    # The platform operator: belongs to no township and is the account that creates them.
+    super-admin-login-id: superadmin
+    super-admin-password: ${GATECRASH_BOOTSTRAP_SUPER_ADMIN_PASSWORD:}
+    # The administrator of the DEFAULT township seeded by V3__multi_tenancy.sql.
     admin-login-id: admin
     admin-password: ${GATECRASH_BOOTSTRAP_ADMIN_PASSWORD:}
+    default-township-code: DEFAULT
     # Off by default, and DevDataSeeder refuses to start if it is ever true outside local/test.
     # Enabled in application-local.yml only.
     seed-demo-data: false

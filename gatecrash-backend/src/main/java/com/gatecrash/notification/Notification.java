@@ -39,6 +39,13 @@ public class Notification {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    /**
+     * The tenant this broadcast targets. Stored as a plain id rather than an association because the
+     * author may be a super admin acting inside the township, whose own {@code township_id} is null.
+     */
+    @Column(name = "township_id", nullable = false, updatable = false)
+    private UUID townshipId;
+
     @Column(name = "author_id", nullable = false, updatable = false)
     private UUID authorId;
 

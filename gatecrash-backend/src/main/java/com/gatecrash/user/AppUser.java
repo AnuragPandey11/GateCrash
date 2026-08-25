@@ -1,6 +1,7 @@
 package com.gatecrash.user;
 
 import com.gatecrash.township.Flat;
+import com.gatecrash.township.Township;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -43,17 +44,33 @@ public class AppUser {
     @Column(name = "role", nullable = false, columnDefinition = "user_role")
     private UserRole role;
 
-    /** What the user types to log in: {@code A-101-1} for residents, an assigned code otherwise. */
-    @Column(name = "login_id", nullable = false, unique = true, updatable = false)
+    /**
+     * The tenant this account belongs to. Null for -- and only for -- {@code SUPER_ADMIN}, which the
+     * {@code super_admin_is_tenantless} check constraint enforces as an exact biconditional rather
+     * than leaving it to application convention.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "township_id", updatable = false)
+    private Township township;
+
+    /**
+     * What the user types to log in: {@code A-101-1} for residents, an assigned code otherwise.
+     *
+     * <p>Unique per township, not globally -- every township with a block A mints an {@code A-101-1}.
+     * That is why login also takes the township code; see {@code AuthService}.
+     */
+    @Column(name = "login_id", nullable = false, updatable = false)
     private String loginId;
 
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
-    @Column(name = "phone", unique = true)
+    /** Unique within the township ({@code ux_user_township_phone}), not across the platform. */
+    @Column(name = "phone")
     private String phone;
 
-    @Column(name = "email", unique = true)
+    /** Unique within the township ({@code ux_user_township_email}), not across the platform. */
+    @Column(name = "email")
     private String email;
 
     /** BCrypt digest. Never serialised, never logged, never returned. */
@@ -96,6 +113,10 @@ public class AppUser {
 
     public UUID getFlatId() {
         return flat == null ? null : flat.getId();
+    }
+
+    public UUID getTownshipId() {
+        return township == null ? null : township.getId();
     }
 
     public void bumpTokenVersion() {

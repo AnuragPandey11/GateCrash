@@ -12,6 +12,7 @@
 
 type Brand<K, T> = K & { readonly __brand: T };
 
+export type TownshipId = Brand<string, 'TownshipId'>;
 export type UserId = Brand<string, 'UserId'>;
 export type FlatId = Brand<string, 'FlatId'>;
 export type BlockId = Brand<string, 'BlockId'>;
@@ -31,6 +32,7 @@ export type QrToken = Brand<string, 'QrToken'>;
  * the id probably wants threading through properly instead.
  */
 export const asId = {
+  township: (v: string) => v as TownshipId,
   user: (v: string) => v as UserId,
   flat: (v: string) => v as FlatId,
   block: (v: string) => v as BlockId,

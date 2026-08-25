@@ -112,13 +112,14 @@ class ExpirySweepJobTest extends AbstractIntegrationTest {
     private UUID pendingVisit(OffsetDateTime createdAt) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
-                INSERT INTO visitor_log (id, gate_id, logged_by, visitor_name, visitor_type,
-                                         approver_id, approver_kind, target_flat_id, status,
-                                         created_at, updated_at, version)
-                VALUES (?, ?, ?, ?, 'GUEST'::visitor_type, ?, 'RESIDENT'::approver_kind, ?,
+                INSERT INTO visitor_log (id, township_id, gate_id, logged_by, visitor_name,
+                                         visitor_type, approver_id, approver_kind, target_flat_id,
+                                         status, created_at, updated_at, version)
+                VALUES (?, ?, ?, ?, ?, 'GUEST'::visitor_type, ?, 'RESIDENT'::approver_kind, ?,
                         'PENDING'::visit_status, ?, ?, 0)
                 """,
-                id, gate.getId(), guard.getId(), "Stale Visitor", resident.getId(), flat.getId(),
+                id, gate.getTownshipId(), gate.getId(), guard.getId(), "Stale Visitor",
+                resident.getId(), flat.getId(),
                 java.sql.Timestamp.from(createdAt.toInstant()),
                 java.sql.Timestamp.from(createdAt.toInstant()));
         return id;
@@ -126,6 +127,7 @@ class ExpirySweepJobTest extends AbstractIntegrationTest {
 
     private UUID pass(OffsetDateTime validUntil) {
         PreApproval pass = new PreApproval();
+        pass.setTownship(resident.getTownship());
         pass.setCreatedBy(resident);
         pass.setApproverKind(ApproverKind.RESIDENT);
         pass.setVisitorType(VisitorType.GUEST);

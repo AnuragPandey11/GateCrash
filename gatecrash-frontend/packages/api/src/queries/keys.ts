@@ -1,4 +1,4 @@
-import type { BlockId, GateId, UserId, VisitId } from '@gatecrash/core';
+import type { BlockId, GateId, TownshipId, UserId, VisitId } from '@gatecrash/core';
 import type { PageArgs } from '../pagination';
 import type { UserFilters, VisitFilters } from '../filters';
 
@@ -53,6 +53,21 @@ export const qk = {
     gates: ['admin', 'gates'] as const,
     notifications: (page: PageArgs) => ['admin', 'notifications', page] as const,
     notificationsAll: ['admin', 'notifications'] as const,
+  },
+
+  /**
+   * Platform (SUPER_ADMIN). Kept under its own prefix rather than beside `admin` because these are
+   * the only keys whose data is *not* scoped to the acting township — invalidating `admin` on a
+   * township switch must not blow away the township list itself.
+   */
+  platform: {
+    all: ['platform'] as const,
+    townships: (page: PageArgs, includeArchived: boolean) =>
+      ['platform', 'townships', page, includeArchived] as const,
+    townshipsAll: ['platform', 'townships'] as const,
+    township: (id: TownshipId) => ['platform', 'townships', 'one', id] as const,
+    townshipAdmins: (id: TownshipId) => ['platform', 'townships', id, 'admins'] as const,
+    superAdmins: ['platform', 'admins'] as const,
   },
 
   salesOnDuty: ['sales', 'on-duty'] as const,

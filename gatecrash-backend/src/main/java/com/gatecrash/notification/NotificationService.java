@@ -12,6 +12,7 @@ import com.gatecrash.notification.dto.NotificationDtos.AudienceRule;
 import com.gatecrash.notification.dto.NotificationDtos.CreateNotificationRequest;
 import com.gatecrash.notification.dto.NotificationDtos.InboxItemResponse;
 import com.gatecrash.notification.dto.NotificationDtos.NotificationResponse;
+import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -40,6 +41,11 @@ import java.util.stream.Collectors;
  *
  * <p>Recipient rows are inserted in chunks. A township-wide broadcast is thousands of rows, and one
  * statement per row would hold a write transaction open far longer than the admin's request should.
+ *
+ * <p>The audience is resolved within the sending township and nowhere else -- see
+ * {@link AudienceResolver}. The inbox side needs no tenant predicate: a recipient row is keyed on a
+ * user id, and a user belongs to exactly one township, so reading your own inbox cannot reach
+ * another's.
  */
 @Service
 @RequiredArgsConstructor
@@ -68,6 +74,7 @@ public class NotificationService {
         }
 
         Notification notification = new Notification();
+        notification.setTownshipId(TenantContext.requireTownshipId());
         notification.setAuthorId(SecurityUtils.currentUserId());
         notification.setTitle(request.title().trim());
         notification.setBody(request.body().trim());
@@ -111,7 +118,9 @@ public class NotificationService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> history(Pageable pageable) {
-        return PageResponse.of(notifications.findAllByOrderByCreatedAtDesc(pageable),
+        return PageResponse.of(
+                notifications.findByTownshipIdOrderByCreatedAtDesc(
+                        TenantContext.requireTownshipId(), pageable),
                 notification -> toResponse(notification,
                         (int) recipients.countByNotificationIdAndDeliveredTrue(notification.getId())));
     }

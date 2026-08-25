@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository layout
 
-This repo currently contains only the backend (`gatecrash-backend/`), plus two design documents at the
-repo root that are the source of truth for the whole system:
+Two runnable trees, plus three design documents at the repo root that are the source of truth:
 
+- **`gatecrash-backend/`** — Spring Boot 3 / Java 21 API. Everything below under "Architecture".
+- **`gatecrash-frontend/`** — pnpm workspace: `packages/{core,api,realtime,config}` shared contract
+  packages plus `apps/admin` (React + Vite admin web). Mobile (React Native) is still planned.
 - **`ARCHITECTURE.md`** — full DB schema (DDL), REST API design, real-time (WebSocket/FCM) flow, and
-  phased build roadmap for the entire product (backend + admin web + mobile).
+  phased build roadmap for the entire product.
 - **`BACKEND.md`** — the concrete backend build spec: project layout, security model, service-by-service
-  logic, testing strategy, and a "Guardrails (do not violate)" section. This is what the current Java
-  code implements.
+  logic, testing strategy, and a "Guardrails (do not violate)" section.
+- **`FRONTEND.md`** — the frontend build spec: package split, session lifecycle, realtime client,
+  screen-by-screen behaviour, and its own guardrails.
 
-Admin web (React) and mobile (React Native) are planned (see ARCHITECTURE.md §4 phases 7–8) but not yet
-present in this repo — everything here today is the Spring Boot backend.
-
-When a change touches API shape, DB schema, security rules, or the real-time protocol, check these two
-docs first — they encode *why*, not just *what*.
+When a change touches API shape, DB schema, security rules, tenancy, or the real-time protocol, check
+these docs first — they encode *why*, not just *what*.
 
 ## Commands
 
@@ -46,17 +46,21 @@ mvn package
 
 Swagger UI: `http://localhost:8080/swagger-ui`.
 
-Under the **local** profile, `DevDataSeeder` seeds a usable township on startup — block `Block A`,
-flats `A-101`–`A-104`, gate `Main Gate`, and one ready-to-use account per role (`admin`, `guard-01`,
-`sales-01`, `A-101-1`) all sharing the password `Township#2026`. It is idempotent, never modifies an
-existing account, and **refuses to start if `app.bootstrap.seed-demo-data` is true outside
-local/test**. See `gatecrash-backend/README.md`.
+Under the **local** profile, `DevDataSeeder` seeds a usable township on startup — the `DEFAULT`
+township, block `Block A`, flats `A-101`–`A-104`, gate `Main Gate`, and one ready-to-use account per
+role (`superadmin`, `admin`, `guard-01`, `sales-01`, `A-101-1`) all sharing the password
+`Township#2026`. It is idempotent, never modifies an existing account, and **refuses to start if
+`app.bootstrap.seed-demo-data` is true outside local/test**. See `gatecrash-backend/README.md`.
 
-Without seeding, the V1 migration creates only an `admin` row with an unusable `!` hash and
-`BootstrapAdminInitializer` sets the real password at startup — from
-`GATECRASH_BOOTSTRAP_ADMIN_PASSWORD`, or a random one printed once to the log (local/test only).
-There `mustResetPassword` is true, so sign in as `admin` then immediately
-`POST /api/v1/auth/password` — that flag blocks every other endpoint until you do.
+Sign-in takes a **township code** plus the login id (`DEFAULT` + `admin`), except for `superadmin`,
+which is a `SUPER_ADMIN`, belongs to no township, and signs in with the code omitted.
+
+Without seeding, the migrations create two accounts with an unusable `!` hash — `superadmin`
+(tenantless platform operator) and `admin` (administrator of the `DEFAULT` township) — and
+`BootstrapAdminInitializer` sets their real passwords at startup, from
+`GATECRASH_BOOTSTRAP_SUPER_ADMIN_PASSWORD` / `GATECRASH_BOOTSTRAP_ADMIN_PASSWORD`, or random ones
+printed once to the log (local/test only). There `mustResetPassword` is true, so sign in then
+immediately `POST /api/v1/auth/password` — that flag blocks every other endpoint until you do.
 
 ### Tests need no Docker, but do need real Postgres
 
@@ -68,6 +72,39 @@ One Postgres instance is shared per JVM across all test classes (`PostgresTestSu
 test class owns its own data isolation.
 
 ## Architecture
+
+### Multi-tenancy: the township is the boundary
+
+Every operational row belongs to exactly one **township** (`township_id`), and `SUPER_ADMIN` is the
+only role that belongs to none — `super_admin_is_tenantless` makes that an exact biconditional in the
+schema, not a convention. Three mechanisms enforce it, and each covers what the others cannot:
+
+1. **`TenantContext` + `TenantContextFilter`** (`common/tenant/`) decide the acting township **once,
+   per request, from the authenticated principal**. An ordinary account gets its own and a header
+   naming a different one is `403 TOWNSHIP_MISMATCH`; a `SUPER_ADMIN` names it in `X-Township-Id`,
+   validated against the `township` table before any service runs. It is a `ThreadLocal` for the same
+   reason `SecurityUtils` is: a `townshipId` threaded through every signature means the one call site
+   somebody forgets is a *silent cross-tenant read*, while a missing context is a loud
+   `422 TOWNSHIP_CONTEXT_REQUIRED`. Cleared in a `finally` block — request threads are pooled.
+2. **Every query is anchored on it.** Finders are `findByIdAndTownship_Id`; listing specifications add
+   the township predicate first and unconditionally. Another township's id is a `404`, never a `403`.
+3. **Composite `(id, township_id)` foreign keys** make a cross-tenant `visitor_log` unwritable even if
+   the service layer is bypassed.
+
+Login is `(townshipCode, loginId, password)` because login ids are unique only within a township —
+every township with a block A mints an `A-101-1`. A `SUPER_ADMIN` omits the code.
+
+`SUPER_ADMIN` is granted `ROLE_ADMIN` alongside `ROLE_SUPER_ADMIN`, so it passes every
+`hasRole('ADMIN')` check inside the township it names — but never `GUARD`, `RESIDENT` or `SALES`,
+which are the physical parties to a visit. `/api/v1/super/**` (package `platform/`) owns the township
+lifecycle: create, suspend, **archive** (the soft delete — reversible, requires the township's own
+code as confirmation, and destroys nothing), restore, plus township-admin and peer-super-admin
+management. `TenantContext.callAs` is how a super admin provisions into a township it names.
+
+When adding a tenant-scoped endpoint, expect all three of the above plus the RBAC layers below.
+`MultiTenancyTest` is the negative matrix that proves it (the way `RbacNegativeTest` proves the
+roles), `TenancyConstraintsTest` proves the DB backstop through raw JDBC, and `SuperAdminTest`
+covers the township lifecycle.
 
 ### Layering is strict: controller → service → repository
 
@@ -111,9 +148,12 @@ always the single source of truth** both reconcile against — clients also have
 `/notifications/mine` to reconcile on foreground after a dropped push/socket.
 
 - `RealtimeService` wraps `SimpMessagingTemplate`: `toGate(gateId, evt)` → `/topic/gate/{id}`,
-  `toUser(userId, dest, evt)` → `/user/{userId}/queue/...`, occupancy → `/topic/admin/inside`.
-- `StompAuthChannelInterceptor` validates the JWT on STOMP `CONNECT` and rejects subscriptions to
-  channels the principal doesn't own (a guard may only subscribe to their own gate's topic).
+  `toUser(userId, dest, evt)` → `/user/{userId}/queue/...`, occupancy →
+  `/topic/admin/inside/{townshipId}`. The tenant is in the destination, not the payload — a shared
+  topic would push every township's movements to every township's dashboard.
+- `StompAuthChannelInterceptor` validates the JWT on STOMP `CONNECT` (refusing a non-`ACTIVE`
+  township) and rejects subscriptions to channels the principal doesn't own — checking the **tenant**
+  as well as the role, since a valid token from township A must not reach township B's gate topic.
 - **After-commit dispatch is mandatory**: every push/WebSocket side effect goes through
   `AfterCommitExecutor` so it only fires once the triggering transaction actually commits — a rolled-back
   transaction must never have already told someone their gate buzzed.
@@ -122,14 +162,19 @@ always the single source of truth** both reconcile against — clients also have
 
 ### Auth & tokens
 
-- Login is `login_id` + password only — no self-signup, no OTP. All accounts are admin-provisioned
-  (`UserProvisioningService`). Residents get a derived `login_id` (flat number + per-flat sequence, e.g.
-  `A-101-1`, `A-101-2`); sales/guard/admin get an admin-assigned code.
+- Login is `townshipCode` + `login_id` + password only — no self-signup, no OTP. All accounts are
+  admin-provisioned (`UserProvisioningService`, which refuses `ADMIN` from anyone but a super admin
+  and `SUPER_ADMIN` outright). Residents get a derived `login_id` (flat number + per-flat sequence,
+  e.g. `A-101-1`, `A-101-2`, unique *within the township*); sales/guard/admin get an admin-assigned
+  code. `AppUserDetailsService` is deliberately not a Spring `UserDetailsService` — resolving an
+  account from a username alone no longer has a single answer.
 - Generated passwords/PINs are returned exactly once in the API response and never logged or stored in
   plaintext (BCrypt for passwords; `PinHasher` — a peppered HMAC — gives PIN redemption a queryable index
   without ever storing/querying the plaintext PIN).
-- Access tokens are short-lived JWTs stamped with `tokenVersion`, so a password change or admin
-  deactivation invalidates them immediately rather than waiting out the TTL (`JwtAuthFilter`). Refresh
+- Access tokens are short-lived JWTs stamped with `tokenVersion`, so a password change, admin
+  deactivation, or a township suspension invalidates them immediately rather than waiting out the TTL
+  (`JwtAuthFilter`, which also refuses a non-`ACTIVE` township). The `tid` claim is informational
+  only — authorization always takes the township from the reloaded row. Refresh
   tokens are opaque, stored only as SHA-256, one-time-use with family-wide revocation on reuse
   (`RefreshTokenService`, `RefreshTokenRevoker`).
 - `LoginAttemptService` / `FixedWindowRateLimiter` throttle login and PIN redemption. In-process only —
@@ -140,7 +185,9 @@ always the single source of truth** both reconcile against — clients also have
 ### Notification targeting engine
 
 `AudienceResolver` compiles an `audienceRule` JSONB (`ALL`, `ALL_EXCEPT`, `ROLES`, `FLATS`, `BLOCKS`) into
-one parameterized SQL query against `app_user` (+ `flat`/`building_block` joins). The resolved set is
+one parameterized SQL query against `app_user` (+ `flat`/`building_block` joins), anchored on the
+current township in **every** mode including `ALL` — the difference between "everyone here" and
+"everyone on the platform". The resolved set is
 materialized into `notification_recipient` for audit and read tracking, then device tokens are batched to
 FCM (multicast, ≤500/batch). `POST /notifications/preview` runs the same resolver read-only so an admin
 sees the blast radius before sending.
@@ -155,7 +202,9 @@ persisted.
 
 - `snake_case` in the DB, `camelCase` in Java/JSON, `kebab-case` in URLs.
 - Every schema change is a new `V<n>__description.sql` Flyway migration — never edit an applied one.
-  `ddl-auto: validate`, never auto-DDL.
+  `ddl-auto: validate`, never auto-DDL. Current migrations: `V1__init.sql` (single-tenant baseline),
+  `V2__super_admin_role.sql` (the enum label alone — PostgreSQL cannot *use* a new enum value in the
+  transaction that adds it, and Flyway runs one transaction per migration), `V3__multi_tenancy.sql`.
 - Postgres `ENUM` columns map with `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` + `@Enumerated(EnumType.STRING)`;
   `JSONB` columns map with `@JdbcTypeCode(SqlTypes.JSON)`.
 - Never expose `passwordHash`, generated passwords (beyond the one-time create response), PIN plaintext,
@@ -164,5 +213,9 @@ persisted.
 ## Known limitations (see `gatecrash-backend/README.md` for the full list)
 
 - Single-node WebSocket broker — no cross-instance subscription sharing yet.
-- No guard-to-gate assignment in the schema — any `GUARD` can currently subscribe to any gate topic.
+- No guard-to-gate assignment in the schema — any `GUARD` can subscribe to any gate topic *in their
+  own township*; the tenant half of that check is enforced, the per-gate half is not.
 - Rate limiting is in-process/per-instance — fine for Phase 1, move to Redis before scaling out.
+- The super admin **console** (admin web screens for the township lifecycle) is not built yet. The
+  API, the typed client (`packages/api/src/endpoints/platform.ts`) and the acting-township wiring are
+  complete; see ARCHITECTURE.md §4 phase 9b.

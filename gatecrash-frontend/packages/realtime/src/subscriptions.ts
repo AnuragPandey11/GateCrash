@@ -1,4 +1,4 @@
-import type { GateId, UserRole } from '@gatecrash/core';
+import type { GateId, TownshipId, UserRole } from '@gatecrash/core';
 
 /**
  * The subscription registry — FRONTEND.md §6.3.
@@ -11,10 +11,17 @@ import type { GateId, UserRole } from '@gatecrash/core';
  *
  * Destinations, and who the backend lets subscribe:
  *
- *   /user/queue/visits          any authenticated user (Spring rewrites it to self)
- *   /user/queue/notifications   any authenticated user
- *   /topic/gate/{gateId}        GUARD, ADMIN
- *   /topic/admin/inside         ADMIN only
+ *   /user/queue/visits              any authenticated user (Spring rewrites it to self)
+ *   /user/queue/notifications       any authenticated user
+ *   /topic/gate/{gateId}            GUARD, ADMIN, SUPER_ADMIN — and only for a gate in the
+ *                                   subscriber's own township
+ *   /topic/admin/inside/{townshipId} ADMIN of that township, or SUPER_ADMIN
+ *
+ * **The occupancy topic carries the township id.** It used to be a single `/topic/admin/inside`,
+ * which on a multi-tenant deployment would push every township's movements to every township's
+ * dashboard — and no amount of client-side filtering fixes that, because the frame has already
+ * left the server. Subscribing to the bare path now fails the interceptor, and a failed SUBSCRIBE
+ * kills the session (see above), so this is not a soft migration: the id is required.
  *
  * Client→server SEND is rejected outright; there are no `@MessageMapping` endpoints. The socket
  * is read-only and every write is REST.
@@ -22,19 +29,33 @@ import type { GateId, UserRole } from '@gatecrash/core';
 
 export const USER_QUEUE_VISITS = '/user/queue/visits';
 export const USER_QUEUE_NOTIFICATIONS = '/user/queue/notifications';
-export const TOPIC_ADMIN_INSIDE = '/topic/admin/inside';
+export const topicAdminInside = (townshipId: TownshipId | string) =>
+  `/topic/admin/inside/${townshipId}`;
 export const topicGate = (gateId: GateId | string) => `/topic/gate/${gateId}`;
 
 export interface SubscriptionContext {
+  /**
+   * The township whose live feeds this screen is showing. For every role but SUPER_ADMIN it is the
+   * session's own `townshipId`; for a super admin it is the township they have selected, and until
+   * they select one there is nothing to subscribe to.
+   */
+  townshipId?: TownshipId | null;
   /** ADMIN: gates whose live feed the current screen wants. Usually empty on the web dashboard. */
   watchedGateIds?: readonly GateId[];
   /** GUARD: the gate this device is standing at. Nothing is subscribed until one is picked. */
   selectedGateId?: GateId | null;
 }
 
+/** An admin's occupancy feed, or nothing at all if no township is in context yet. */
+const adminInside = (ctx: SubscriptionContext): string[] =>
+  ctx.townshipId ? [topicAdminInside(ctx.townshipId)] : [];
+
 export const SUBSCRIPTIONS: Record<UserRole, (ctx: SubscriptionContext) => string[]> = {
+  // A super admin has no township of its own, so it subscribes to whichever one it is looking at
+  // and to nothing before it has picked one.
+  SUPER_ADMIN: (ctx) => [...adminInside(ctx), ...(ctx.watchedGateIds ?? []).map(topicGate)],
   ADMIN: (ctx) => [
-    TOPIC_ADMIN_INSIDE,
+    ...adminInside(ctx),
     ...(ctx.watchedGateIds ?? []).map(topicGate),
     USER_QUEUE_NOTIFICATIONS,
   ],

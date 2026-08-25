@@ -1,6 +1,7 @@
 import { HttpResponse, http, type HttpHandler } from 'msw';
 import {
   IDS,
+  TOWNSHIP_CODE,
   apiError,
   blocksFixture,
   flatsFixture,
@@ -12,7 +13,10 @@ import {
   page,
   pendingVisitFixture,
   postFixture,
+  superAdminLoginResponseFixture,
   usersFixture,
+  townshipFixture,
+  archivedTownshipFixture,
 } from './fixtures';
 
 /**
@@ -35,7 +39,11 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
   return [
     // ── Auth ────────────────────────────────────────────────────────────────────────────────
     http.post(url('/auth/login', base), async ({ request }) => {
-      const body = (await request.json()) as { loginId: string; password: string };
+      const body = (await request.json()) as {
+        townshipCode?: string;
+        loginId: string;
+        password: string;
+      };
       if (body.password === 'wrong') {
         return HttpResponse.json(
           apiError(401, 'UNAUTHORIZED', 'Invalid login id or password.'),
@@ -46,6 +54,28 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
         return HttpResponse.json(
           apiError(429, 'TOO_MANY_REQUESTS', 'Too many failed attempts. Try again in 15 minutes.'),
           { status: 429 },
+        );
+      }
+      // A missing township code resolves the tenantless platform namespace, which is where the
+      // super admins live — the same branch `AuthService.resolveAccount` takes.
+      if (!body.townshipCode) {
+        return HttpResponse.json({
+          ...superAdminLoginResponseFixture,
+          mustResetPassword: body.loginId === 'mustreset',
+        });
+      }
+      if (body.townshipCode.toUpperCase() !== TOWNSHIP_CODE) {
+        // An unknown township is deliberately indistinguishable from a wrong password.
+        return HttpResponse.json(
+          apiError(401, 'UNAUTHORIZED', 'Invalid login id or password.'),
+          { status: 401 },
+        );
+      }
+      if (body.loginId === 'suspended') {
+        return HttpResponse.json(
+          apiError(403, 'TOWNSHIP_INACTIVE',
+            'This township is not currently active. Contact your administrator.'),
+          { status: 403 },
         );
       }
       return HttpResponse.json({
@@ -271,6 +301,79 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
       }),
     ),
     http.delete(url('/devices/:id', base), () => new HttpResponse(null, { status: 204 })),
+
+    // ── Platform (SUPER_ADMIN) ──────────────────────────────────────────────────────────────
+    http.get(url('/super/townships', base), ({ request }) => {
+      const includeArchived = new URL(request.url).searchParams.get('includeArchived') === 'true';
+      const rows = includeArchived
+        ? [townshipFixture, archivedTownshipFixture]
+        : [townshipFixture];
+      return HttpResponse.json(page(rows));
+    }),
+    http.get(url('/super/townships/:id', base), () => HttpResponse.json(townshipFixture)),
+    http.post(url('/super/townships', base), async ({ request }) => {
+      const body = (await request.json()) as {
+        code: string;
+        name: string;
+        admin: { loginId: string; fullName: string };
+      };
+      return HttpResponse.json(
+        {
+          township: { ...townshipFixture, code: body.code.toUpperCase(), name: body.name },
+          admin: {
+            id: IDS.admin,
+            loginId: body.admin.loginId,
+            fullName: body.admin.fullName,
+            role: 'ADMIN',
+            townshipId: IDS.township,
+            generatedPassword: 'Xk7-Rq2m-Zt9v',
+          },
+        },
+        { status: 201 },
+      );
+    }),
+    http.post(url('/super/townships/:id/suspend', base), () =>
+      HttpResponse.json({ ...townshipFixture, status: 'SUSPENDED' }),
+    ),
+    http.post(url('/super/townships/:id/restore', base), () =>
+      HttpResponse.json({ ...townshipFixture, status: 'ACTIVE' }),
+    ),
+    http.delete(url('/super/townships/:id', base), async ({ request }) => {
+      const body = (await request.json()) as { confirmCode: string };
+      // Mirrors the server: the code has to come back, or nothing is archived.
+      if (body.confirmCode.toUpperCase() !== townshipFixture.code) {
+        return HttpResponse.json(
+          apiError(422, 'CONFIRMATION_MISMATCH', "confirmCode must match the township's code."),
+          { status: 422 },
+        );
+      }
+      return HttpResponse.json({
+        ...townshipFixture,
+        status: 'ARCHIVED',
+        archivedAt: '2026-08-26T10:00:00+05:30',
+      });
+    }),
+    http.get(url('/super/townships/:id/admins', base), () =>
+      HttpResponse.json([{ ...usersFixture[0], loginId: 'greenwood-admin', role: 'ADMIN' }]),
+    ),
+    http.post(url('/super/townships/:id/admins', base), async ({ request }) => {
+      const body = (await request.json()) as { loginId: string; fullName: string };
+      return HttpResponse.json(
+        {
+          id: IDS.admin,
+          loginId: body.loginId,
+          fullName: body.fullName,
+          role: 'ADMIN',
+          townshipId: IDS.township,
+          generatedPassword: 'Bn4-Wp8k-Lm3q',
+        },
+        { status: 201 },
+      );
+    }),
+    http.delete(url('/super/townships/:id/admins/:userId', base), () =>
+      HttpResponse.json({ ...usersFixture[0], role: 'ADMIN', active: false }),
+    ),
+    http.get(url('/super/admins', base), () => HttpResponse.json([])),
   ];
 }
 

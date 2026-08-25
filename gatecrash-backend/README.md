@@ -3,8 +3,13 @@
 Township ERP — Phase 1: Visitor Management + Targeted Notifications.
 
 Implements [ARCHITECTURE.md](../ARCHITECTURE.md) and [BACKEND.md](../BACKEND.md) in full: identity &
-RBAC, visitor management with a guarded state machine, pre-approval passes, targeted notifications,
-community feed, and the real-time layer (WebSocket/STOMP + FCM) that drives the gate/approver loop.
+RBAC, **multi-tenancy with a platform `SUPER_ADMIN`**, visitor management with a guarded state
+machine, pre-approval passes, targeted notifications, community feed, and the real-time layer
+(WebSocket/STOMP + FCM) that drives the gate/approver loop.
+
+One deployment serves many **townships**, each fully isolated. Every operational row carries a
+`township_id`; `SUPER_ADMIN` is the only role that carries none, and is the only role that can create,
+suspend, archive or restore a township or appoint its administrators.
 
 - **Java 21 · Spring Boot 3.3.4 · Maven**
 - **PostgreSQL 16 · Flyway** (migrate on boot, `ddl-auto: validate`)
@@ -27,20 +32,33 @@ Swagger UI: http://localhost:8080/swagger-ui
 Under the **local** profile the app seeds a usable township on startup — a block, four flats, a
 gate, and one ready-to-use account per role (`DevDataSeeder`). Every one shares the same password:
 
-| Login ID | Role | Notes |
-|---|---|---|
-| `admin` | `ADMIN` | Admin web app |
-| `guard-01` | `GUARD` | Gate Guard One |
-| `sales-01` | `SALES` | Meera Shah |
-| `A-101-1` | `RESIDENT` | Ravi Kumar, flat A-101 |
+| Township code | Login ID | Role | Notes |
+|---|---|---|---|
+| *(none)* | `superadmin` | `SUPER_ADMIN` | Platform operator — creates townships |
+| `DEFAULT` | `admin` | `ADMIN` | Admin web app |
+| `DEFAULT` | `guard-01` | `GUARD` | Gate Guard One |
+| `DEFAULT` | `sales-01` | `SALES` | Meera Shah |
+| `DEFAULT` | `A-101-1` | `RESIDENT` | Ravi Kumar, flat A-101 |
 
 ```
 password: Township#2026
 ```
 
-Also created: block **Block A**, flats **A-101 … A-104**, gate **Main Gate**. A resident cannot be
-provisioned without a flat and a guard cannot log a visit without a gate, so seeding the accounts
-alone would not actually be usable.
+**Sign-in takes the township code as well as the login id** — login ids are unique only within a
+township, so `A-101-1` exists in every township that has a block A:
+
+```bash
+curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"townshipCode":"DEFAULT","loginId":"admin","password":"Township#2026"}'
+
+# The super admin belongs to no township, so it omits the code entirely:
+curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"loginId":"superadmin","password":"Township#2026"}'
+```
+
+Also created: the **`DEFAULT`** township, block **Block A**, flats **A-101 … A-104**, gate **Main
+Gate**. A resident cannot be provisioned without a flat and a guard cannot log a visit without a gate,
+so seeding the accounts alone would not actually be usable.
 
 Seeded accounts have `mustResetPassword` **false** — the point of a fixture is that it is ready to
 use, and four forced password changes before any testing can start is not that. The seeder is
@@ -53,11 +71,38 @@ if you change a password by hand it survives every restart.
 > laptop and a breach anywhere real. Override the password with `GATECRASH_SEED_PASSWORD`, or turn
 > the whole thing off with `app.bootstrap.seed-demo-data: false`.
 
-**Without seeding** (any other profile, or the flag off): the V1 migration seeds only an `admin`
-row with an unusable `!` password hash, and `BootstrapAdminInitializer` sets the real one at
-startup — from `GATECRASH_BOOTSTRAP_ADMIN_PASSWORD`, or a random one printed once to the log under
-local/test. Either way `mustResetPassword` is true, so sign in as `admin` and
-`POST /api/v1/auth/password` immediately; that flag blocks every other endpoint until you do.
+**Without seeding** (any other profile, or the flag off): the migrations seed two accounts with an
+unusable `!` password hash — `superadmin` (tenantless platform operator, from `V3`) and `admin`
+(administrator of the `DEFAULT` township, from `V1`) — and `BootstrapAdminInitializer` sets their real
+passwords at startup, from `GATECRASH_BOOTSTRAP_SUPER_ADMIN_PASSWORD` /
+`GATECRASH_BOOTSTRAP_ADMIN_PASSWORD`, or random ones printed once to the log under local/test. Either
+way `mustResetPassword` is true, so sign in and `POST /api/v1/auth/password` immediately; that flag
+blocks every other endpoint until you do.
+
+### Onboarding a township
+
+```bash
+# As the super admin. Creates the township and its first administrator in one call --
+# a township with no admin is unusable and nobody inside it can fix that.
+curl -s localhost:8080/api/v1/super/townships -H "Authorization: Bearer $SUPER_TOKEN" \
+  -H 'Content-Type: application/json' -d '{
+    "code": "GREENWOOD",
+    "name": "Greenwood Township",
+    "admin": { "loginId": "greenwood-admin", "fullName": "Priya Nair" }
+  }'
+# -> { township: {...}, admin: { loginId, generatedPassword } }   <- password shown exactly once
+```
+
+A super admin then works *inside* a township by calling the ordinary `/api/v1/admin/**` endpoints with
+an `X-Township-Id` header naming it. Omitting the header on a township-scoped endpoint is a clear
+`422 TOWNSHIP_CONTEXT_REQUIRED` rather than a silent default — picking a township on the caller's
+behalf is how an announcement lands in the wrong community.
+
+`DELETE /api/v1/super/townships/{id}` **archives**: sign-in stops immediately, every live session ends
+(token versions bumped, refresh tokens revoked), and nothing is destroyed. It requires the township's
+own code in the body as confirmation, and `POST .../restore` reverses it. There is no hard delete —
+the visitor log and audit trail are the record of who was admitted through a gate and who authorised
+it.
 
 ## Running the tests
 
@@ -99,6 +144,26 @@ Three enforcement layers on every privileged operation, and none of them is opti
 3. **DB constraints** (`CHECK`, `UNIQUE`, enum types) are the backstop so a bug or race can never
    persist an invalid row, independent of the application layer.
 
+**Tenancy is a fourth, independent boundary**, and it has to be: every one of the three layers above
+passes for an admin reaching at another township's data, because their role really is `ADMIN` and the
+row really does exist.
+
+- **`TenantContext` / `TenantContextFilter`** decide the acting township once per request, from the
+  authenticated principal — never from a path, body or query parameter. An ordinary account gets its
+  own; a `SUPER_ADMIN` names one in `X-Township-Id`, validated before any service runs.
+- **Every finder is anchored on it** (`findByIdAndTownship_Id`, township-first specifications). A row
+  from another township answers `404`, never `403` — across a tenant boundary "not yours" and "does
+  not exist" must be the same answer.
+- **Composite `(id, township_id)` foreign keys** make a cross-tenant `visitor_log` unwritable at the
+  storage layer, and `super_admin_is_tenantless` makes "SUPER_ADMIN ⟺ no township" exact.
+- **Pass redemption and audience resolution narrow by township first.** A PIN or QR code from one
+  township is not a key at another's gate, and an `ALL` broadcast means "everyone here".
+
+Three test classes hold this up: `MultiTenancyTest` is the negative tenancy matrix (the counterpart
+to `RbacNegativeTest` — every case holds a valid token for the right role and is refused anyway),
+`TenancyConstraintsTest` proves the database refuses a cross-tenant row through raw JDBC with the
+whole application layer bypassed, and `SuperAdminTest` covers the township lifecycle.
+
 Other things worth knowing before you extend this:
 
 - **Passwords & PINs.** BCrypt only; a peppered HMAC (`PinHasher`) gives PIN redemption an index to
@@ -127,8 +192,16 @@ See inline docs on `SecurityConfig`, `VisitService`, `PassService`, `StompAuthCh
 - **Single-node WebSocket broker.** `enableSimpleBroker` doesn't share subscriptions across instances.
   Scaling horizontally needs a STOMP relay (RabbitMQ/ActiveMQ) or a Redis pub/sub bridge — noted in
   `WebSocketConfig`.
-- **No guard-to-gate assignment in the schema.** Any GUARD may currently subscribe to any gate topic;
-  narrowing that needs a `gate_id` on `app_user` (or a join table) plus one more check in
+- **No guard-to-gate assignment in the schema.** Any GUARD may subscribe to any gate topic *in their
+  own township* — the tenant half of that check is enforced, the per-gate half is not. Narrowing it
+  needs a `gate_id` on `app_user` (or a join table) plus one more check in
   `StompAuthChannelInterceptor` — noted there.
 - **Rate limiting is per-instance.** Fine for Phase 1; move to Redis when the backend goes
-  multi-instance.
+  multi-instance. Login budgets are keyed on `(townshipCode, loginId)`, so one township's failures
+  cannot lock out another township's account of the same name.
+- **The super admin console is minimal.** `/townships` in the admin web app covers the lifecycle and
+  admin management; the `/super/admins` endpoints (managing peer platform operators) are implemented
+  and typed on the client but have no screen yet.
+- **Scheduled sweeps run platform-wide.** `ExpirySweepJob` acts on a time predicate, not on caller
+  input, so one set-based statement covers every township rather than N per-tenant queries. Its audit
+  rows are recorded as system actions with no township, which is what they are.

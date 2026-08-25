@@ -13,7 +13,8 @@ import { SessionExpired, type SessionManager } from './session';
  *  - a correlation id on every request (§4.3.3),
  *  - `Content-Type: application/json` on every body-bearing request, or the server answers 415,
  *  - one retry after a single-flight refresh on 401, and never a refresh on a 403 (§5.3),
- *  - every failure arriving as an `ApiException`, never a raw `Response` (§4.5).
+ *  - every failure arriving as an `ApiException`, never a raw `Response` (§4.5),
+ *  - the acting township on every request a super admin makes (see `TOWNSHIP_HEADER`).
  *
  * The surface is deliberately small — `get/post/patch/delete` returning parsed JSON — rather than
  * re-exporting ky. Endpoint modules should not be choosing retry policies or header sets.
@@ -21,6 +22,16 @@ import { SessionExpired, type SessionManager } from './session';
 
 /** Marks a request we have already retried once, so a second 401 is a hard logout, not a loop. */
 const RETRY_MARKER = 'X-Gc-Retried';
+
+/**
+ * Names the township a request acts inside — `TenantContextFilter` on the server.
+ *
+ * Only a SUPER_ADMIN needs to send it, because only a SUPER_ADMIN belongs to no township. Every
+ * other role has its tenancy stamped on its account row, and the server answers 403
+ * `TOWNSHIP_MISMATCH` to a header that disagrees with it — so this client sends the header only
+ * when the session has no township of its own, and lets the server be the authority otherwise.
+ */
+export const TOWNSHIP_HEADER = 'X-Township-Id';
 
 export type QueryValue = string | number | boolean | null | undefined;
 
@@ -43,6 +54,15 @@ export interface ApiClientOptions {
   session: SessionManager;
   /** Called when any endpoint answers `403 PASSWORD_RESET_REQUIRED` (§5.4). */
   onPasswordResetRequired?: () => void;
+  /**
+   * The township a SUPER_ADMIN is currently acting inside, as the app shell's township picker sees
+   * it. Read per request, not captured, so switching township takes effect on the very next call.
+   *
+   * Returning `null` is normal and correct while no township is selected: the platform endpoints
+   * under `/super` need none, and a township-scoped call without one gets a precise 422
+   * `TOWNSHIP_CONTEXT_REQUIRED` rather than silently acting on some default township.
+   */
+  actingTownshipId?: () => string | null;
 }
 
 export class ApiClient {
@@ -52,7 +72,7 @@ export class ApiClient {
   private readonly authed: KyInstance;
   private readonly anon: KyInstance;
 
-  constructor({ baseUrl, session, onPasswordResetRequired }: ApiClientOptions) {
+  constructor({ baseUrl, session, onPasswordResetRequired, actingTownshipId }: ApiClientOptions) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.session = session;
 
@@ -76,6 +96,13 @@ export class ApiClient {
             const token = session.getAccessToken();
             if (token) request.headers.set('Authorization', `Bearer ${token}`);
           },
+          (request) => {
+            // Sent only when the session has no township of its own — that is, for a SUPER_ADMIN.
+            // Sending it for anyone else is a 403 from the server, by design.
+            if (session.getTownshipId() !== null) return;
+            const township = actingTownshipId?.() ?? null;
+            if (township) request.headers.set(TOWNSHIP_HEADER, township);
+          },
         ],
         afterResponse: [
           async (request, _options, response) => {
@@ -94,6 +121,8 @@ export class ApiClient {
             const retried = request.clone();
             retried.headers.set('Authorization', `Bearer ${token}`);
             retried.headers.set(RETRY_MARKER, '1');
+            // `clone()` carries the tenant header over with the rest, so the retry lands in the
+            // same township as the original attempt.
             // A retry is a new attempt and deserves its own correlation id, so support sees two
             // distinct log lines rather than one confusing duplicate.
             retried.headers.set(CORRELATION_HEADER, correlationId());

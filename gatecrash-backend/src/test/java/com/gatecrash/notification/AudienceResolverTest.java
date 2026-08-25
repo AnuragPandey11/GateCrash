@@ -217,7 +217,13 @@ class AudienceResolverTest extends AbstractIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    /**
+     * The resolver reads its township from {@code TenantContext}, which a filter establishes on a
+     * real request. These cases call it directly, so the context is supplied here -- the same way
+     * {@code TownshipLifecycleService} supplies one when provisioning a new township's first admin.
+     */
     private List<UUID> resolve(AudienceRule rule) {
-        return resolver.resolve(rule);
+        return com.gatecrash.common.tenant.TenantContext.callAs(
+                data.primaryTownship().getId(), () -> resolver.resolve(rule));
     }
 }

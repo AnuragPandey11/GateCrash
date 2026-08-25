@@ -32,6 +32,8 @@ public class JwtService {
     public static final String CLAIM_ROLE = "role";
     public static final String CLAIM_LOGIN_ID = "loginId";
     public static final String CLAIM_TOKEN_VERSION = "tv";
+    /** Tenant the token was issued for; absent for SUPER_ADMIN, which belongs to no township. */
+    public static final String CLAIM_TOWNSHIP = "tid";
     public static final String CLAIM_MUST_RESET = "mrp";
     public static final String CLAIM_TYPE = "typ";
     public static final String TYPE_ACCESS = "access";
@@ -63,6 +65,8 @@ public class JwtService {
                 .claim(CLAIM_ROLE, user.getRole().name())
                 .claim(CLAIM_LOGIN_ID, user.getUsername())
                 .claim(CLAIM_TOKEN_VERSION, user.getTokenVersion())
+                .claim(CLAIM_TOWNSHIP,
+                        user.getTownshipId() == null ? null : user.getTownshipId().toString())
                 .claim(CLAIM_MUST_RESET, user.isMustResetPassword())
                 .claim(CLAIM_TYPE, TYPE_ACCESS)
                 .issuedAt(Date.from(now))
@@ -97,8 +101,18 @@ public class JwtService {
         }
         Integer tokenVersion = claims.get(CLAIM_TOKEN_VERSION, Integer.class);
         Boolean mustReset = claims.get(CLAIM_MUST_RESET, Boolean.class);
+        // The tenant claim is informational -- it makes a captured token readable in a support
+        // session. Authorization never trusts it: JwtAuthFilter reloads the account and takes the
+        // township from the row, so a token cannot outlive a tenancy change.
+        UUID townshipId;
+        try {
+            String rawTownship = claims.get(CLAIM_TOWNSHIP, String.class);
+            townshipId = rawTownship == null ? null : UUID.fromString(rawTownship);
+        } catch (IllegalArgumentException ex) {
+            throw new JwtException("Malformed token claims");
+        }
         return new AccessToken(userId, claims.get(CLAIM_LOGIN_ID, String.class), role,
-                tokenVersion == null ? -1 : tokenVersion, Boolean.TRUE.equals(mustReset));
+                tokenVersion == null ? -1 : tokenVersion, Boolean.TRUE.equals(mustReset), townshipId);
     }
 
     public Duration accessTtl() {
@@ -107,6 +121,6 @@ public class JwtService {
 
     /** Verified claims of an access token. */
     public record AccessToken(UUID userId, String loginId, UserRole role, int tokenVersion,
-                              boolean mustResetPassword) {
+                              boolean mustResetPassword, UUID townshipId) {
     }
 }

@@ -32,7 +32,11 @@ export const IDS = {
   pass: '99999999-9999-4999-8999-999999999999',
   notification: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   post: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  township: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 } as const;
+
+/** Every fixture below belongs to this one township — see `TOWNSHIP_CODE` for the login half. */
+export const TOWNSHIP_CODE = 'GREENWOOD';
 
 export const loginResponseFixture = {
   accessToken: 'header.payload.signature',
@@ -43,6 +47,19 @@ export const loginResponseFixture = {
   role: 'ADMIN',
   userId: IDS.admin,
   fullName: 'Priya Nair',
+  townshipId: IDS.township,
+  townshipCode: TOWNSHIP_CODE,
+  townshipName: 'Greenwood Township',
+};
+
+/** A platform operator: no township at all, which is what `SUPER_ADMIN` means. */
+export const superAdminLoginResponseFixture = {
+  ...loginResponseFixture,
+  role: 'SUPER_ADMIN',
+  fullName: 'Platform Operator',
+  townshipId: null,
+  townshipCode: null,
+  townshipName: null,
 };
 
 export const meResponseFixture = {
@@ -55,6 +72,9 @@ export const meResponseFixture = {
   flatId: null,
   flatNumber: null,
   blockName: null,
+  townshipId: IDS.township,
+  townshipCode: TOWNSHIP_CODE,
+  townshipName: 'Greenwood Township',
 };
 
 export const residentMeFixture = {
@@ -134,6 +154,7 @@ export const usersFixture: UserResponse[] = [
   {
     id: IDS.resident,
     loginId: 'A-101-1',
+    townshipId: IDS.township,
     fullName: 'Ravi Kumar',
     role: 'RESIDENT',
     phone: '+919812345678',
@@ -149,6 +170,7 @@ export const usersFixture: UserResponse[] = [
   {
     id: IDS.guard,
     loginId: 'guard-01',
+    townshipId: IDS.township,
     fullName: 'Gate Guard 1',
     role: 'GUARD',
     phone: null,
@@ -211,3 +233,33 @@ export function apiError(status: number, code: string, message: string, extra: o
     ...extra,
   };
 }
+
+
+// ── Platform (SUPER_ADMIN) ──────────────────────────────────────────────────────────────────
+
+export const townshipFixture = {
+  id: IDS.township,
+  code: TOWNSHIP_CODE,
+  name: 'Greenwood Township',
+  status: 'ACTIVE',
+  contactEmail: null,
+  contactPhone: null,
+  activeUserCount: 12,
+  activeAdminCount: 1,
+  blockCount: 2,
+  gateCount: 1,
+  createdAt: '2026-01-04T09:00:00+05:30',
+  archivedAt: null,
+};
+
+/** A second tenant, archived — so a listing test can assert the includeArchived filter honestly. */
+export const archivedTownshipFixture = {
+  ...townshipFixture,
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  code: 'WESTGATE',
+  name: 'Westgate Township',
+  status: 'ARCHIVED',
+  activeUserCount: 0,
+  activeAdminCount: 1,
+  archivedAt: '2026-06-01T10:00:00+05:30',
+};

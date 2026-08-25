@@ -6,6 +6,7 @@ import com.gatecrash.common.audit.AuditService;
 import com.gatecrash.common.exception.BusinessValidationException;
 import com.gatecrash.common.exception.ConflictException;
 import com.gatecrash.common.exception.NotFoundException;
+import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.SecurityUtils;
 import com.gatecrash.user.dto.UserDtos.SalesAgentResponse;
 import com.gatecrash.user.dto.UserDtos.UpdateUserRequest;
@@ -25,7 +26,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-/** Account administration, plus the sales duty toggle that feeds the guard's dropdown. */
+/**
+ * Account administration, plus the sales duty toggle that feeds the guard's dropdown.
+ *
+ * <p>Every method is confined to {@link TenantContext}'s township. The listing filter carries the
+ * tenant as a non-optional predicate rather than as one of the optional ones, so there is no
+ * combination of query parameters that widens it -- and the point lookups resolve by
+ * {@code (id, townshipId)}, so an id belonging to another township is indistinguishable from one
+ * that does not exist.
+ */
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -41,16 +50,15 @@ public class UserService {
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> list(UserRole role, Boolean active, UUID flatId, String search,
                                            Pageable pageable) {
-        return PageResponse.of(users.findAll(filter(role, active, flatId, search), pageable),
-                mapper::toResponse);
+        Specification<AppUser> specification =
+                filter(TenantContext.requireTownshipId(), role, active, flatId, search);
+        return PageResponse.of(users.findAll(specification, pageable), mapper::toResponse);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public UserResponse get(UUID userId) {
-        return users.findById(userId)
-                .map(mapper::toResponse)
-                .orElseThrow(() -> NotFoundException.of("User", userId));
+        return mapper.toResponse(require(userId));
     }
 
     /**
@@ -61,22 +69,22 @@ public class UserService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public UserResponse update(UUID userId, UpdateUserRequest request) {
-        AppUser user = users.findById(userId)
-                .orElseThrow(() -> NotFoundException.of("User", userId));
+        UUID townshipId = TenantContext.requireTownshipId();
+        AppUser user = require(userId);
 
         if (request.fullName() != null && !request.fullName().isBlank()) {
             user.setFullName(request.fullName().trim());
         }
         if (request.phone() != null) {
             String phone = normalise(request.phone());
-            if (phone != null && users.existsByPhoneAndIdNot(phone, userId)) {
+            if (phone != null && users.existsByTownship_IdAndPhoneAndIdNot(townshipId, phone, userId)) {
                 throw new ConflictException("PHONE_TAKEN", "That phone number is already registered.");
             }
             user.setPhone(phone);
         }
         if (request.email() != null) {
             String email = normalise(request.email());
-            if (email != null && users.existsByEmailAndIdNot(email, userId)) {
+            if (email != null && users.existsByTownship_IdAndEmailAndIdNot(townshipId, email, userId)) {
                 throw new ConflictException("EMAIL_TAKEN", "That email address is already registered.");
             }
             user.setEmail(email);
@@ -94,8 +102,7 @@ public class UserService {
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
     public UserResponse setActive(UUID userId, boolean active) {
-        AppUser user = users.findById(userId)
-                .orElseThrow(() -> NotFoundException.of("User", userId));
+        AppUser user = require(userId);
 
         if (!active && userId.equals(SecurityUtils.currentUserId())) {
             throw new BusinessValidationException("CANNOT_DEACTIVATE_SELF",
@@ -144,14 +151,24 @@ public class UserService {
     @PreAuthorize("hasAnyRole('GUARD','ADMIN')")
     @Transactional(readOnly = true)
     public List<SalesAgentResponse> onDutySalesAgents() {
-        return users.findByRoleAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(UserRole.SALES).stream()
+        return users.findByTownship_IdAndRoleAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
+                        TenantContext.requireTownshipId(), UserRole.SALES).stream()
                 .map(mapper::toSalesAgent)
                 .toList();
     }
 
-    private Specification<AppUser> filter(UserRole role, Boolean active, UUID flatId, String search) {
+    /** Tenant-safe point lookup: another township's user id is a 404, not a 403. */
+    private AppUser require(UUID userId) {
+        return users.findByIdAndTownship_Id(userId, TenantContext.requireTownshipId())
+                .orElseThrow(() -> NotFoundException.of("User", userId));
+    }
+
+    private Specification<AppUser> filter(UUID townshipId, UserRole role, Boolean active, UUID flatId,
+                                          String search) {
         return (root, query, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            // Not optional, and deliberately added before anything the caller controls.
+            predicates.add(builder.equal(root.get("township").get("id"), townshipId));
             if (role != null) {
                 predicates.add(builder.equal(root.get("role"), role));
             }

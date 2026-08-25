@@ -55,6 +55,8 @@ export interface RenderOptions {
  */
 export type RenderContext = ReturnType<typeof render> & { queryClient: QueryClient };
 
+export const TEST_TOWNSHIP_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
 export const ADMIN_SESSION: MeResponse = {
   id: '11111111-1111-4111-8111-111111111111',
   loginId: 'admin',
@@ -65,6 +67,27 @@ export const ADMIN_SESSION: MeResponse = {
   flatId: null,
   flatNumber: null,
   blockName: null,
+  townshipId: TEST_TOWNSHIP_ID,
+  townshipCode: 'GREENWOOD',
+  townshipName: 'Greenwood Township',
+} as MeResponse;
+
+/**
+ * A platform operator: no township at all.
+ *
+ * `setMe` seeds `actingTownshipId` from the session, so this session starts with **none** — which
+ * is the state the router has to handle, and the one a test asking "what does a super admin see
+ * before choosing a township?" needs.
+ */
+export const SUPER_ADMIN_SESSION: MeResponse = {
+  ...ADMIN_SESSION,
+  id: '22222222-2222-4222-8222-222222222222',
+  loginId: 'superadmin',
+  fullName: 'Platform Operator',
+  role: 'SUPER_ADMIN',
+  townshipId: null,
+  townshipCode: null,
+  townshipName: null,
 } as MeResponse;
 
 export function renderWithProviders(

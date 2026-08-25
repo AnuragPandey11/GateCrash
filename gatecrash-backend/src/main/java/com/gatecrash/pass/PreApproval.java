@@ -1,5 +1,6 @@
 package com.gatecrash.pass;
 
+import com.gatecrash.township.Township;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.visit.ApproverKind;
 import com.gatecrash.visit.VisitorType;
@@ -47,6 +48,11 @@ public class PreApproval {
     @UuidGenerator
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
+
+    /** The tenant. A pass minted in one township is not a credential at another township's gate. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "township_id", nullable = false, updatable = false)
+    private Township township;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by", nullable = false, updatable = false)
@@ -113,6 +119,10 @@ public class PreApproval {
                 && !now.isBefore(validFrom)
                 && now.isBefore(validUntil)
                 && useCount < maxUses;
+    }
+
+    public UUID getTownshipId() {
+        return township == null ? null : township.getId();
     }
 
     public UUID getCreatedById() {

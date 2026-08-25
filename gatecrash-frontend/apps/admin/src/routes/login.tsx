@@ -14,13 +14,25 @@ import { endpoints, useSessionStore } from '@/lib/session';
 /**
  * Login — FRONTEND.md §5.6 and §0.
  *
- * Two fields and **no third link**. There is no self-signup, no OTP, no "forgot password" — an
- * admin provisions the account and hands over a generated password. Adding a link here would be
+ * Three fields and **no link**. There is no self-signup, no OTP, no "forgot password" — an admin
+ * provisions the account and hands over a generated password. Adding a link here would be
  * promising a flow the backend does not have.
  *
- * The one piece of real logic is distinguishing 401 from 429: a guard mashing a locked-out login
- * is how a shift starts badly, so a lockout says so, says for how long, and disables submit
- * rather than letting them burn attempts against a counter that is already tripped (§5.6).
+ * **Township code is part of the credential.** Login ids are unique only within a township, so
+ * `A-101-1` exists in every township that has a block A; without the code the server has no
+ * namespace to resolve the login id in. It is optional for exactly one caller — a `SUPER_ADMIN`
+ * belongs to no township and signs in with the field blank, which resolves against the tenantless
+ * platform namespace instead. Hence a blank field is submitted as *absent*, never as an empty
+ * string, which would be a present code matching no township.
+ *
+ * Two pieces of real logic beyond that:
+ *
+ *  - 401 vs 429: a guard mashing a locked-out login is how a shift starts badly, so a lockout says
+ *    so, says for how long, and disables submit rather than letting them burn attempts against a
+ *    counter that is already tripped (§5.6).
+ *  - 403 `TOWNSHIP_INACTIVE`: the credentials were right and the township is suspended or
+ *    archived. Saying so is safe (it is only reachable with valid credentials) and necessary —
+ *    "wrong password" would send an entire township chasing a problem they do not have.
  */
 export function LoginRoute() {
   const { t } = useTranslation();
@@ -31,7 +43,7 @@ export function LoginRoute() {
 
   const form = useForm<LoginRequest>({
     resolver: zodResolver(loginRequestSchema),
-    defaultValues: { loginId: '', password: '' },
+    defaultValues: { townshipCode: '', loginId: '', password: '' },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -48,6 +60,10 @@ export function LoginRoute() {
       }
       if (isApiException(error) && error.status === 401) {
         setFormError(t('login.invalid'));
+        return;
+      }
+      if (isApiException(error) && error.code === 'TOWNSHIP_INACTIVE') {
+        setFormError(t('login.townshipInactive'));
         return;
       }
       setFormError(t('errors.generic'));
@@ -83,13 +99,30 @@ export function LoginRoute() {
             </p>
           ) : null}
 
+          <Field
+            label={t('login.townshipCode')}
+            hint={t('login.townshipCodeHint')}
+            error={form.formState.errors.townshipCode?.message}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                {...form.register('townshipCode')}
+                autoComplete="organization"
+                autoFocus
+                spellCheck={false}
+                autoCapitalize="characters"
+                className="uppercase"
+              />
+            )}
+          </Field>
+
           <Field label={t('login.loginId')} error={form.formState.errors.loginId?.message} required>
             {(props) => (
               <Input
                 {...props}
                 {...form.register('loginId')}
                 autoComplete="username"
-                autoFocus
                 spellCheck={false}
                 autoCapitalize="none"
               />

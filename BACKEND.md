@@ -14,6 +14,10 @@ Layering is strict: `controller → service → repository`. Controllers never t
 logic lives only in services. Never expose JPA entities over HTTP — map to/from DTOs. Money is not in
 scope for Phase 1. snake_case in DB, camelCase in Java/JSON, kebab-case in URLs.
 
+**This is a multi-tenant deployment.** Every operational row belongs to exactly one township, and
+`SUPER_ADMIN` is the only role that belongs to none. §5.5 is the tenancy model and is as load-bearing
+as the RBAC model beside it — read both before touching a repository or a service.
+
 ---
 
 ## 1. Project Layout
@@ -28,7 +32,9 @@ gatecrash-backend/
 │   ├── application-prod.yml
 │   ├── firebase/service-account.json  # NOT committed; env/secret in prod
 │   └── db/migration/
-│       └── V1__init.sql
+│       ├── V1__init.sql
+│       ├── V2__super_admin_role.sql    # the enum label, alone -- see §5.5
+│       └── V3__multi_tenancy.sql
 └── src/main/java/com/gatecrash/
     ├── GateCrashApplication.java
     ├── config/
@@ -49,9 +55,11 @@ gatecrash-backend/
     │   ├── ApiError.java
     │   ├── GlobalExceptionHandler.java
     │   ├── exceptions/ (NotFoundException, ForbiddenException, ConflictException, ValidationException)
+    │   ├── tenant/ (TenantContext, TenantContextFilter)   # the acting township -- §5.5
     │   └── audit/ (AuditService, AuditAspect)
     ├── user/         (AppUser, enums, repo, dto, UserService, AdminUserController, AuthController, AuthService)
-    ├── township/     (BuildingBlock, Flat, Gate + repos + AdminTownshipController)
+    ├── township/     (Township, TownshipStatus, BuildingBlock, Flat, Gate + repos + AdminTownshipController)
+    ├── platform/     (TownshipLifecycleService, SuperAdminService, SuperAdminController, dto)  # /api/v1/super
     ├── device/       (Device, DeviceRepository, DeviceController, DeviceService)
     ├── visit/        (VisitorLog, VisitService, VisitController, dto, VisitEventPublisher)
     ├── pass/         (PreApproval, PassService, PassController, dto)
@@ -200,31 +208,62 @@ map `JSONB` columns with `@JdbcTypeCode(SqlTypes.JSON)`.
 ## 5. Security Model
 
 ### 5.1 Password login (all roles)
-- Login is **`login_id` + password**. `AppUserDetailsService.loadUserByUsername(loginId)` loads by `login_id`.
+- Login is **`townshipCode` + `login_id` + password**. Login ids are unique only *within* a township,
+  so the code names the namespace to resolve the id in. A `SUPER_ADMIN` omits it and is resolved in
+  the tenantless platform namespace (`township_id IS NULL`) instead.
 - `PasswordEncoder` = `BCryptPasswordEncoder(10)`.
 - Accounts are **admin-provisioned only**; there is no public registration endpoint.
+- `AppUserDetailsService` is deliberately **not** a Spring `UserDetailsService`. That contract
+  resolves an account from a username alone, which no longer has a single answer — implementing it
+  would mean either picking a township arbitrarily or querying across all of them, and both are the
+  exact bug multi-tenancy exists to prevent. It exposes `loadById` only.
 
-`AuthService.login(loginId, rawPassword)`:
-1. Load user by `login_id`; `401` if absent/inactive.
-2. `passwordEncoder.matches(...)`; `401` on mismatch.
-3. Mint access JWT (claims: `sub=userId`, `role`, `loginId`) + opaque refresh token (store SHA-256 in `refresh_token`).
-4. Return `{ accessToken, refreshToken, mustResetPassword, role }`.
+`AuthService.login(townshipCode, loginId, rawPassword)`:
+1. Throttle on `(townshipCode, loginId)` — keying on the login id alone would let failures against
+   one township's `A-101-1` lock out the unrelated account of the same name everywhere else.
+2. Resolve the township by code (or the platform namespace when the code is absent), then the
+   account within it; `401` if either is absent or the account is inactive.
+3. `passwordEncoder.matches(...)`; `401` on mismatch. An unknown township code, a missing account
+   and a wrong password are indistinguishable and all pay for one bcrypt comparison — otherwise the
+   login form enumerates the platform's customer list.
+4. **Then** check the township's status; `403 TOWNSHIP_INACTIVE` if it is not `ACTIVE`. Reached only
+   with valid credentials in hand, so a specific answer discloses nothing — and returning "invalid
+   credentials" to an entire suspended township sends every resident chasing a password problem
+   they do not have.
+5. Mint access JWT (claims: `sub=userId`, `role`, `loginId`, `tid`) + opaque refresh token (store
+   SHA-256 in `refresh_token`).
+6. Return `{ accessToken, refreshToken, mustResetPassword, role, townshipId, townshipCode, townshipName }`.
 
 `AuthService.changePassword(userId, current, next)`: verify current, set new bcrypt hash, clear
 `must_reset_password`, revoke existing refresh tokens.
 
 ### 5.2 JWT
 `JwtService` signs HS256 with `app.jwt.secret`. `JwtAuthFilter` (OncePerRequestFilter) parses the bearer
-token, builds an `Authentication` with authority `ROLE_<role>`, sets it on the `SecurityContext`.
+token, reloads the account, and builds an `Authentication` with authority `ROLE_<role>`.
+
+The `tid` (township) claim is **informational only** — it makes a captured token readable in a
+support session. Authorization never trusts it: the filter takes the township from the reloaded row,
+so a token cannot outlive a tenancy change. The filter also rejects the request with
+`401 TOWNSHIP_INACTIVE` when the account's township is suspended or archived, which is what makes a
+lifecycle change take effect on the very next request rather than when the TTL lapses.
 
 ### 5.3 Method-level RBAC (three-layer isolation)
 `@EnableMethodSecurity` on `SecurityConfig`. Every privileged service method carries `@PreAuthorize`:
 
 ```java
+@PreAuthorize("hasRole('SUPER_ADMIN')")                    // township lifecycle, platform accounts
 @PreAuthorize("hasRole('ADMIN')")                          // admin-only provisioning, notifications
 @PreAuthorize("hasRole('GUARD')")                          // logging visits, redeeming passes
 @PreAuthorize("hasAnyRole('RESIDENT','SALES')")            // deciding visits, minting passes
 ```
+
+**A `SUPER_ADMIN` is granted `ROLE_ADMIN` as well as `ROLE_SUPER_ADMIN`** (`AppUserDetails.getAuthorities`),
+so it passes every `hasRole('ADMIN')` check — but only inside the township its `X-Township-Id` header
+names. Widening forty-odd annotations by hand would have worked once; granting the authority means the
+*next* admin endpoint somebody adds does not silently exclude the platform operator because they
+copied an annotation that only listed `ADMIN`. It is deliberately not granted `GUARD`, `RESIDENT` or
+`SALES`: those are the physical parties to a visit, and a platform operator standing in for them
+would make the audit trail a fiction.
 
 Layer 2 alone is not enough — **service methods also re-check ownership** (layer 3). Example: a resident can
 only decide a visit whose `approver_id == currentUserId()`; otherwise `ForbiddenException` → `403`. A guard
@@ -234,14 +273,78 @@ hitting an admin endpoint gets `403` from `@PreAuthorize`. Negative RBAC tests a
 ```
 /auth/login, /auth/refresh, /v3/api-docs/**, /swagger-ui/**   -> permitAll
 /ws/**                                                        -> permitAll (authenticated at STOMP CONNECT)
+/api/v1/super/**                                              -> hasRole('SUPER_ADMIN')
 everything else                                              -> authenticated
 ```
+
+The `/super/**` rule is redundant with `@PreAuthorize` on every method behind it, and that is the
+point: a newly added endpoint under that prefix is closed by default rather than open until somebody
+remembers the annotation.
 Stateless sessions, CSRF disabled (token auth), CORS allowlist for the web/admin origin.
 
 ### 5.4 WebSocket auth
 `StompAuthChannelInterceptor` validates the JWT on the STOMP `CONNECT` frame (bearer in the `Authorization`
 native header), sets the `Principal`, and **rejects subscriptions to channels the principal doesn't own**
 (a guard may only subscribe to their gate's topic; a user only to their own `/user/queue/**`).
+
+It also refuses `CONNECT` when the principal's township is not `ACTIVE` — a socket outlives any
+single request, so without that check a connection opened before a suspension would keep streaming
+afterwards — and checks the *tenant*, not only the role, on `SUBSCRIBE`:
+
+- `/topic/gate/{gateId}` — the gate is resolved within the subscriber's own township. Without this a
+  guard in township A holding a perfectly valid token could watch township B's gate just by knowing
+  its id. REST-layer tenant scoping does nothing for the broker.
+- `/topic/admin/inside/{townshipId}` — must be the subscriber's own township (any, for a super admin).
+
+### 5.5 Multi-tenancy — the township boundary
+
+Three mechanisms, and each covers what the others cannot.
+
+**1. `TenantContext` + `TenantContextFilter` — one decision, per request, from the principal.**
+The filter runs after `JwtAuthFilter` and before the password-reset gate. For an ordinary account it
+copies `app_user.township_id` into a `ThreadLocal`; a header naming a *different* township is
+`403 TOWNSHIP_MISMATCH`, refused rather than ignored, because a client that sends it either has a bug
+worth surfacing or is probing the boundary. For a `SUPER_ADMIN` it reads `X-Township-Id`, resolves it
+against the `township` table, and rejects an archived one — so every service downstream can treat
+`TenantContext.requireTownshipId()` as a real, existing, non-archived tenant. The context is cleared
+in a `finally` block: request threads are pooled, and a leaked `ThreadLocal` hands the next request
+the previous caller's tenant.
+
+Why a `ThreadLocal` rather than a parameter, for the same reason `SecurityUtils` is one: threading a
+`townshipId` through every signature guarantees that the one call site somebody forgets is a *silent
+cross-tenant read*, whereas a missing context here is a loud `422 TOWNSHIP_CONTEXT_REQUIRED`.
+`TenantContext.callAs` / `runAs` supply one explicitly for work with no request behind it — a super
+admin provisioning a new township's first admin, or a test calling a service directly.
+
+**2. Every query is anchored on the tenant.** Repository finders are `findByIdAndTownship_Id`, not
+`findById`; listing specifications add the township predicate *first* and unconditionally, so no
+combination of query parameters widens them. A row from another township resolves to a `404`, never a
+`403` — across a tenant boundary "not yours" and "does not exist" must be the same answer, or the
+endpoint is an existence oracle. Two lookups matter more than the rest:
+
+- **Pass redemption** narrows by township before it bcrypt-compares a PIN or resolves a QR token.
+  Six digits shared across a whole platform makes cross-township PIN collisions routine, not
+  theoretical; this is both the security boundary and what keeps the candidate list small.
+- **Audience resolution** anchors every mode, `ALL` included — the difference between "everyone here"
+  and "everyone on the platform".
+
+**3. The database is the backstop.** Composite `(id, township_id)` foreign keys pin a visit's gate,
+guard, approver, flat and pass to the visit's own township; `super_admin_is_tenantless` makes
+"SUPER_ADMIN ⟺ no township" an exact biconditional rather than a convention. A bug or a race cannot
+persist a cross-tenant row independently of the application layer — the same reasoning the existing
+`CHECK` constraints embody.
+
+**Migrations.** `V2__super_admin_role.sql` adds the enum label and nothing else; `V3__multi_tenancy.sql`
+does the rest. The split is required, not stylistic: PostgreSQL 12+ permits `ALTER TYPE … ADD VALUE`
+inside a transaction but the new label cannot be *used* until that transaction commits, and Flyway
+runs each migration in its own. Pre-existing rows are adopted into a `DEFAULT` township; on a fresh
+install that is simply the first township, already usable.
+
+**Bootstrap.** Two seeded accounts, because there are two levels of authority: `superadmin`
+(tenantless, the account that creates townships) and `admin` (administrator of `DEFAULT`). Both are
+inserted with the unusable `'!'` hash and given a real password at startup by
+`BootstrapAdminInitializer`, from `GATECRASH_BOOTSTRAP_SUPER_ADMIN_PASSWORD` /
+`GATECRASH_BOOTSTRAP_ADMIN_PASSWORD` or — in local/test only — a random one logged once.
 
 ---
 
@@ -354,9 +457,16 @@ public record AudienceRule(
 
 ### 8.1 `UserProvisioningService` (ADMIN)
 `createUser(req)`:
-1. `@PreAuthorize("hasRole('ADMIN')")`.
+1. `@PreAuthorize("hasRole('ADMIN')")`. The account lands in `TenantContext.requireTownshipId()`'s
+   township — never in one named by the request body. Two roles are refused here and have their own
+   paths: `ADMIN` needs `SUPER_ADMIN` (`403 ADMIN_REQUIRES_SUPER_ADMIN`), because an admin who could
+   mint further admins would make the platform operator's control over the tenant advisory; and
+   `SUPER_ADMIN` outright (`422 ROLE_NOT_PROVISIONABLE`), because it belongs to no township at all.
 2. If `RESIDENT`: require `flatId`; derive `login_id = flat.number + "-" + (countByFlat_Id(flatId)+1)`
-   (e.g. `A-101-1`, then `A-101-2`). If `SALES/GUARD/ADMIN`: require the supplied `loginId`, ensure unique.
+   (e.g. `A-101-1`, then `A-101-2`) — unique within the township only. If `SALES/GUARD/ADMIN`: require
+   the supplied `loginId`, ensure unique **within the township**. Phone and email uniqueness is
+   likewise per township: a global check would leak across the boundary, since "that number is
+   already registered" would be a true statement about a different customer's township.
 3. **Generate password** — `PasswordGenerator.generate(app.password.generated-length)` (crypto-random,
    mixed case + digits, ambiguity-free alphabet). Store `bcrypt(password)`, `must_reset_password = true`,
    `created_by = currentUserId()`.
@@ -391,7 +501,10 @@ public record AudienceRule(
    to the guard's devices.
 
 `checkIn` / `checkOut` — GUARD only, FSM `APPROVED → CHECKED_IN → CHECKED_OUT`; on `CHECKED_IN`/`CHECKED_OUT`
-publish occupancy delta to `/topic/admin/inside`.
+publish occupancy delta to `/topic/admin/inside/{townshipId}`, with a count scoped to that township.
+
+Every lookup above resolves by `(id, townshipId)` — the gate, the routed flat, the sales agent, the
+visit itself — so an id from another township is a `404` before the ownership and FSM checks run.
 
 ### 8.3 `PassService`
 `createPass(req)` — RESIDENT/SALES, `@Transactional`:
@@ -435,7 +548,10 @@ truth**; clients reconcile via `GET /visits/pending` and `/notifications/mine`.
 
 ### 8.6 `RealtimeService`
 Thin wrapper over `SimpMessagingTemplate`: `toGate(gateId, evt)` → `/topic/gate/{id}`;
-`toUser(userId, dest, evt)` → `/user/{userId}/queue/...`; `toAdminInside(evt)` → `/topic/admin/inside`.
+`toUser(userId, dest, evt)` → `/user/{userId}/queue/...`; `toAdminInside(townshipId, evt)` →
+`/topic/admin/inside/{townshipId}`. The tenant is in the destination rather than the payload: a single
+shared topic would deliver every township's movements to every township's dashboard, and no
+client-side filtering fixes that once the frame has left the server.
 
 ---
 
@@ -545,6 +661,29 @@ Testcontainers Postgres (real schema via Flyway) for all integration tests. Laye
    `preview` count matches `send` recipient count.
 8. **Scheduled jobs:** seed a stale `PENDING` visit → `expirePendingVisits` flips it and emits the WS event;
    ShedLock prevents double-run across two app contexts.
+9. **Negative tenancy matrix (mandatory, `MultiTenancyTest`):** the multi-tenant counterpart to (1).
+   Every case holds a *valid* token for a *real* account with the *right* role and is refused anyway,
+   because the row it reaches for belongs to another township — which is the point: the role checks
+   pass in all of them, so if the tenant boundary is not enforced independently, every one succeeds.
+   Two townships are stood up with deliberately identical structure (same block name, same flat
+   number, therefore the same derived resident login id), because the collisions tenancy has to
+   survive are exactly the ones a single-tenant schema made impossible. Covers: login ids that do not
+   cross; an unknown township code indistinguishable from a wrong password; a tenant header refused
+   for an ordinary account; user/flat/gate/visit lookups answering `404`; a pass that will not redeem
+   at another township's gate; an `ALL` broadcast and a community feed that stop at the boundary.
+10. **Tenancy constraints (`TenancyConstraintsTest`):** layer 3 tested where it lives. Every
+    statement goes through raw JDBC, deliberately bypassing Hibernate, the services and the security
+    chain — which is the point: the service layer already scopes every query and (9) proves it, so
+    what these assert is what happens when that layer is *wrong*. A visit borrowing another
+    township's gate, flat or approver; a `SUPER_ADMIN` with a township or a `GUARD` without one; a
+    duplicate login id within a township (and the same one legal across two); a malformed township
+    code; an archived township with no timestamp. If any of these were writable, tenant isolation
+    would be a convention rather than a guarantee.
+11. **Platform lifecycle (`SuperAdminTest`):** onboarding returns a working admin credential;
+    archiving requires the township's own code, kills a live token on the *next* request, and
+    `restore` finds everything intact; a suspended township stays reachable by the operator; the last
+    township admin and the last super admin cannot be removed; no township role reaches `/super/**`;
+    a `SUPER_ADMIN` cannot be minted through a township endpoint.
 
 Target: services + resolvers ~90% line coverage; controllers covered via slice/e2e tests.
 
@@ -553,8 +692,9 @@ Target: services + resolvers ~90% line coverage; controllers covered via slice/e
 ## 13. Build Order (matches ARCHITECTURE.md §4 roadmap)
 
 Phase 0 scaffold → 1 identity/RBAC + admin provisioning → 2 township + sales duty → 3 visit core →
-4 real-time (WS + jobs) → 5 passes → 6 notifications + community → then hand off to the web/admin and mobile
-tracks. Each phase ships with its migration, service tests, and the RBAC negative tests green before moving on.
+4 real-time (WS + jobs) → 5 passes → 6 notifications + community → 9a multi-tenancy + the platform role
+→ then hand off to the web/admin and mobile tracks. Each phase ships with its migration, service tests,
+and the RBAC **and tenancy** negative tests green before moving on.
 
 ---
 
@@ -566,3 +706,14 @@ tracks. Each phase ships with its migration, service tests, and the RBAC negativ
 - Every state transition is FSM-guarded, DB-constrained, and written to `audit_log`.
 - All push/WS delivery is best-effort; **Postgres is authoritative** and clients reconcile on foreground.
 - Every schema change is a new Flyway migration; `ddl-auto: validate`, never auto-DDL.
+- **The acting township comes from `TenantContext`, never from a request body, path variable or query
+  parameter.** A `townshipId` argument on a service method is the beginning of a cross-tenant bug; if
+  one is genuinely needed for out-of-request work, borrow the context with `TenantContext.callAs`.
+- **Every repository finder is anchored on the tenant.** A bare `findById` in a service that serves an
+  HTTP request is a bug, even when it looks safe — the id came from a URL. Resolve `(id, townshipId)`
+  and let another township's id be a `404`, never a `403`.
+- **Never widen `@PreAuthorize` to reach across townships.** Role and tenant are independent
+  questions; a `SUPER_ADMIN` gets its breadth from the `ROLE_ADMIN` authority plus an explicit
+  `X-Township-Id`, not from an annotation that skips the boundary.
+- **A township is archived, never deleted.** No cascade, no purge endpoint, no cleanup job: the
+  visitor log and audit trail are the record of who was let through a gate and who authorised it.

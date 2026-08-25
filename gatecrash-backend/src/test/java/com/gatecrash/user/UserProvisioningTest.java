@@ -67,7 +67,7 @@ class UserProvisioningTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", loginId, "password", password))))
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", loginId, "password", password))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mustResetPassword").value(true));
     }
@@ -87,11 +87,11 @@ class UserProvisioningTest extends AbstractIntegrationTest {
         assertThat(newPassword).isNotEqualTo(oldPassword);
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", guard.getLoginId(), "password", oldPassword))))
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", guard.getLoginId(), "password", oldPassword))))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("loginId", guard.getLoginId(), "password", newPassword))))
+                        .content(json(Map.of("townshipCode", data.primaryTownship().getCode(), "loginId", guard.getLoginId(), "password", newPassword))))
                 .andExpect(status().isOk());
     }
 

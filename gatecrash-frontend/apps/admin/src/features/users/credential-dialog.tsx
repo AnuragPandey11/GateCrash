@@ -32,6 +32,14 @@ export interface CredentialDialogProps {
   loginId: string;
   password: string;
   fullName: string;
+  /**
+   * The township code the holder types alongside their login id.
+   *
+   * Not decoration: login ids are unique only within a township, so the code is half the
+   * credential. A hand-off card that omits it is a card nobody can sign in with. Omitted only for a
+   * SUPER_ADMIN, which belongs to no township and signs in with the field blank.
+   */
+  townshipCode?: string | null;
   /** True for a reset rather than a fresh account — the copy differs. */
   isReset?: boolean;
   onDismiss: () => void;
@@ -42,6 +50,7 @@ export function CredentialDialog({
   loginId,
   password,
   fullName,
+  townshipCode = null,
   isReset = false,
   onDismiss,
 }: CredentialDialogProps) {
@@ -62,6 +71,11 @@ export function CredentialDialog({
         </DialogHeader>
 
         <div id="credential-printable" className="space-y-3">
+          {townshipCode ? (
+            <CredentialRow label={t('users.credentials.townshipCode')} value={townshipCode} />
+          ) : (
+            <p className="text-xs text-text-muted">{t('users.credentials.noTownship')}</p>
+          )}
           <CredentialRow label={t('users.credentials.loginId')} value={loginId} />
           <CredentialRow label={t('users.credentials.password')} value={password} />
           <p className="text-xs text-text-muted">{t('users.credentials.mustChange')}</p>
@@ -73,8 +87,10 @@ export function CredentialDialog({
             onClick={() => {
               printCredentials({
                 heading: fullName,
+                townshipCode,
                 loginId,
                 password,
+                townshipLabel: t('users.credentials.townshipCode'),
                 loginLabel: t('users.credentials.loginId'),
                 passwordLabel: t('users.credentials.password'),
                 note: t('users.credentials.mustChange'),
@@ -128,8 +144,10 @@ function CredentialRow({ label, value }: { label: string; value: string }) {
  */
 function printCredentials(data: {
   heading: string;
+  townshipCode: string | null;
   loginId: string;
   password: string;
+  townshipLabel: string;
   loginLabel: string;
   passwordLabel: string;
   note: string;
@@ -166,6 +184,11 @@ function printCredentials(data: {
   <h1>GateCrash account</h1>
   <p class="sub">${escapeHtml(data.heading)}</p>
   <dl>
+    ${
+      data.townshipCode
+        ? `<dt>${escapeHtml(data.townshipLabel)}</dt><dd>${escapeHtml(data.townshipCode)}</dd>`
+        : ''
+    }
     <dt>${escapeHtml(data.loginLabel)}</dt><dd>${escapeHtml(data.loginId)}</dd>
     <dt>${escapeHtml(data.passwordLabel)}</dt><dd>${escapeHtml(data.password)}</dd>
   </dl>

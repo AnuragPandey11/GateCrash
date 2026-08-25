@@ -6,8 +6,16 @@
  * here without the matching Flyway migration is how you ship a 400 to a gate.
  */
 
-export const USER_ROLES = ['ADMIN', 'GUARD', 'RESIDENT', 'SALES'] as const;
+/**
+ * `SUPER_ADMIN` is first because it is the only role that lives outside a township — its
+ * `townshipId` is `null`, it signs in without a township code, and it carries ADMIN authority into
+ * whichever township it names on a request. Everything else is scoped to exactly one township.
+ */
+export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'GUARD', 'RESIDENT', 'SALES'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
+
+export const TOWNSHIP_STATUSES = ['ACTIVE', 'SUSPENDED', 'ARCHIVED'] as const;
+export type TownshipStatus = (typeof TOWNSHIP_STATUSES)[number];
 
 export const VISITOR_TYPES = ['GUEST', 'DELIVERY', 'MAINTENANCE', 'CLIENT'] as const;
 export type VisitorType = (typeof VISITOR_TYPES)[number];

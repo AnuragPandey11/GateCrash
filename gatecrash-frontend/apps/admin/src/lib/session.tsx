@@ -39,7 +39,17 @@ interface SessionStore {
   me: MeResponse | null;
   /** Why the session ended, so the login screen can say something more useful than nothing. */
   endedReason: string | null;
+  /**
+   * The township a SUPER_ADMIN is currently acting inside.
+   *
+   * Null for every other role, and null for a super admin who has not picked one yet. It is read
+   * per request by `ApiClient` and turned into the `X-Township-Id` header; for an ordinary account
+   * the server ignores the question entirely and takes the township from the account row, so this
+   * can never widen anyone's reach — it only tells the platform operator's requests where to land.
+   */
+  actingTownshipId: string | null;
   setMe: (me: MeResponse) => void;
+  setActingTownship: (townshipId: string | null) => void;
   setUnauthenticated: (reason?: string | null) => void;
   setLoading: () => void;
 }
@@ -48,16 +58,23 @@ export const useSessionStore = create<SessionStore>((set) => ({
   state: 'loading',
   me: null,
   endedReason: null,
+  actingTownshipId: null,
 
   setMe: (me) =>
     set({
       me,
       state: me.mustResetPassword ? 'mustResetPassword' : 'authenticated',
       endedReason: null,
+      // An ordinary account acts in its own township and nowhere else. Seeding it from `me` rather
+      // than leaving it null keeps the value meaningful for the shell to display, while the client
+      // still only sends the header when the session has no township of its own.
+      actingTownshipId: me.townshipId ?? null,
     }),
 
+  setActingTownship: (townshipId) => set({ actingTownshipId: townshipId }),
+
   setUnauthenticated: (reason = null) =>
-    set({ state: 'unauthenticated', me: null, endedReason: reason }),
+    set({ state: 'unauthenticated', me: null, endedReason: reason, actingTownshipId: null }),
 
   setLoading: () => set({ state: 'loading' }),
 }));
@@ -85,6 +102,9 @@ export const sessionManager = new SessionManager({
 export const apiClient: ApiClient = createApiClient({
   baseUrl: API_URL,
   session: sessionManager,
+  // Read fresh on every request, so a super admin switching township in the console takes effect
+  // on the very next call rather than after a reload.
+  actingTownshipId: () => useSessionStore.getState().actingTownshipId,
   onPasswordResetRequired: () => {
     // Can arrive from *any* endpoint (§5.4). Flipping the state here is what force-navigates to
     // the change-password screen no matter which query tripped the filter.

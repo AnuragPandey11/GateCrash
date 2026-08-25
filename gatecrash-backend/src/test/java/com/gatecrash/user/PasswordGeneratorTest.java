@@ -87,6 +87,6 @@ class PasswordGeneratorTest {
                         new AppProperties.Security.Cors(List.of("https://example.com")),
                         new AppProperties.Security.Login(5, 15),
                         new AppProperties.Security.Redeem(10, 1)),
-                new AppProperties.Bootstrap("admin", "", false, null));
+                new AppProperties.Bootstrap("superadmin", "", "admin", "", "DEFAULT", false, null));
     }
 }

@@ -27,6 +27,11 @@ import java.util.UUID;
  *
  * <p>All three are idempotent -- they only ever move rows that still match their predicate -- so a
  * duplicate run or a retry after a crash is harmless.
+ *
+ * <p><b>Tenancy:</b> these sweeps run platform-wide by design. They act on a time predicate, not on
+ * anything a caller supplied, and the alternative -- iterating townships -- would turn one indexed
+ * set-based statement into N of them for no gain in isolation. Their audit rows are recorded as
+ * system actions with no township, which is what they are: one sweep across the whole platform.
  */
 @Component
 @RequiredArgsConstructor
@@ -98,7 +103,12 @@ public class ExpirySweepJob {
         }
     }
 
-    /** What a gate needs to resolve one expired visit on screen. */
+    /**
+     * What a gate needs to resolve one expired visit on screen.
+     *
+     * <p>No township field: the gate id is tenant-unique and the topic is keyed on it, so the frame
+     * reaches exactly the tablets watching that gate and no others.
+     */
     public record GateNotification(UUID visitId, UUID gateId, String visitorName) {
     }
 }

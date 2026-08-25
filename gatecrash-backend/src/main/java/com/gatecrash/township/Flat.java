@@ -30,6 +30,10 @@ public class Flat {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "township_id", nullable = false, updatable = false)
+    private Township township;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "block_id", nullable = false)
     private BuildingBlock block;
 
@@ -40,4 +44,8 @@ public class Flat {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
+
+    public UUID getTownshipId() {
+        return township == null ? null : township.getId();
+    }
 }

@@ -2,7 +2,10 @@ package com.gatecrash.township;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,10 +28,19 @@ public class Gate {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "township_id", nullable = false, updatable = false)
+    private Township township;
+
+    /** Unique within the township, case-insensitively ({@code ux_gate_township_name}). */
     @Column(name = "name", nullable = false)
     private String name;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
+
+    public UUID getTownshipId() {
+        return township == null ? null : township.getId();
+    }
 }

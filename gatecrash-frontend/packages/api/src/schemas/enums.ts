@@ -5,6 +5,7 @@ import {
   DEVICE_PLATFORMS,
   NOTIF_STATUSES,
   PASS_STATUSES,
+  TOWNSHIP_STATUSES,
   USER_ROLES,
   VISIT_STATUSES,
   VISITOR_TYPES,
@@ -21,6 +22,7 @@ export const notifStatusSchema = z.enum(NOTIF_STATUSES);
 export const devicePlatformSchema = z.enum(DEVICE_PLATFORMS);
 export const audienceModeSchema = z.enum(AUDIENCE_MODES);
 export const decisionSchema = z.enum(DECISIONS);
+export const townshipStatusSchema = z.enum(TOWNSHIP_STATUSES);
 
 /** UUID, branded on the way out so ids stay distinguishable downstream (§4.6). */
 export const uuid = <B extends string>() => z.string().uuid() as unknown as z.ZodType<B>;

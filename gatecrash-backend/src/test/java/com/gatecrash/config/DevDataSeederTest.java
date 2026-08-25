@@ -3,6 +3,7 @@ package com.gatecrash.config;
 import com.gatecrash.township.BuildingBlockRepository;
 import com.gatecrash.township.FlatRepository;
 import com.gatecrash.township.GateRepository;
+import com.gatecrash.township.TownshipRepository;
 import com.gatecrash.user.AppUserRepository;
 import com.gatecrash.user.PasswordPolicy;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class DevDataSeederTest {
 
     private final AppUserRepository users = mock(AppUserRepository.class);
+    private final TownshipRepository townships = mock(TownshipRepository.class);
     private final BuildingBlockRepository blocks = mock(BuildingBlockRepository.class);
     private final FlatRepository flats = mock(FlatRepository.class);
     private final GateRepository gates = mock(GateRepository.class);
@@ -47,7 +49,7 @@ class DevDataSeederTest {
                 .hasMessageContaining("must never exist in a real");
 
         // Nothing was written before the refusal -- it fails closed, not halfway.
-        verifyNoInteractions(users, blocks, flats, gates);
+        verifyNoInteractions(users, townships, blocks, flats, gates);
     }
 
     @Test
@@ -58,7 +60,7 @@ class DevDataSeederTest {
             assertThatCode(() -> seeder.run(new DefaultApplicationArguments()))
                     .doesNotThrowAnyException();
         }
-        verifyNoInteractions(users, blocks, flats, gates);
+        verifyNoInteractions(users, townships, blocks, flats, gates);
     }
 
     @Test
@@ -93,7 +95,7 @@ class DevDataSeederTest {
     private DevDataSeeder seeder(AppProperties properties, String... profiles) {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles(profiles);
-        return new DevDataSeeder(users, blocks, flats, gates, passwordEncoder,
+        return new DevDataSeeder(users, townships, blocks, flats, gates, passwordEncoder,
                 new PasswordPolicy(properties), properties, environment);
     }
 
@@ -108,6 +110,6 @@ class DevDataSeederTest {
                         new AppProperties.Security.Cors(List.of("https://example.com")),
                         new AppProperties.Security.Login(5, 15),
                         new AppProperties.Security.Redeem(10, 1)),
-                new AppProperties.Bootstrap("admin", "", seed, seedPassword));
+                new AppProperties.Bootstrap("superadmin", "", "admin", "", "DEFAULT", seed, seedPassword));
     }
 }

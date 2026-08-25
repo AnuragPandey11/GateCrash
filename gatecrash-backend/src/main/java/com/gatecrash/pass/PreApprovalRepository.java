@@ -23,7 +23,15 @@ import java.util.UUID;
  */
 public interface PreApprovalRepository extends JpaRepository<PreApproval, UUID> {
 
-    Optional<PreApproval> findByQrToken(UUID qrToken);
+    /**
+     * QR resolution, scoped to the redeeming guard's township.
+     *
+     * <p>The token is 122 bits of random UUID and globally unique, so an unscoped lookup would find
+     * the right row -- and would happily let a pass minted for township A open a gate in township B.
+     * The tenant predicate is what makes a leaked QR code worthless outside the community that
+     * issued it.
+     */
+    Optional<PreApproval> findByQrTokenAndTownship_Id(UUID qrToken, UUID townshipId);
 
     /**
      * PIN candidates, narrowed by the peppered HMAC index.
@@ -31,20 +39,30 @@ public interface PreApprovalRepository extends JpaRepository<PreApproval, UUID> 
      * <p>Returns a list rather than an Optional because two passes could in principle share a PIN, and
      * because {@code pin_lookup} is an index, not an authoriser -- the caller still bcrypt-verifies
      * each candidate against {@code pin_hash} before accepting one.
+     *
+     * <p>Six digits is a small space, and across a whole platform PIN collisions between townships
+     * are not rare but expected. Narrowing to the guard's township first is therefore both the
+     * security boundary and what keeps the candidate list to the handful the design assumes.
      */
-    @Query("select p from PreApproval p where p.pinLookup = :pinLookup and p.status = :status")
+    @Query("""
+           select p from PreApproval p
+            where p.pinLookup = :pinLookup and p.status = :status and p.township.id = :townshipId
+           """)
     List<PreApproval> findByPinLookupAndStatus(@Param("pinLookup") String pinLookup,
-                                               @Param("status") PassStatus status);
+                                               @Param("status") PassStatus status,
+                                               @Param("townshipId") UUID townshipId);
 
-    default List<PreApproval> findActiveByPinLookup(String pinLookup) {
-        return findByPinLookupAndStatus(pinLookup, PassStatus.ACTIVE);
+    default List<PreApproval> findActiveByPinLookup(String pinLookup, UUID townshipId) {
+        return findByPinLookupAndStatus(pinLookup, PassStatus.ACTIVE, townshipId);
     }
 
     /** Serialises redemption so {@code use_count} cannot be incremented twice for one entry. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from PreApproval p where p.id = :id")
-    Optional<PreApproval> findByIdForUpdate(@Param("id") UUID id);
+    @Query("select p from PreApproval p where p.id = :id and p.township.id = :townshipId")
+    Optional<PreApproval> findByIdForUpdate(@Param("id") UUID id,
+                                            @Param("townshipId") UUID townshipId);
 
+    /** Creator ids are tenant-unique, so a creator's own pass list cannot cross a boundary. */
     Page<PreApproval> findByCreatedBy_IdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
