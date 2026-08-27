@@ -1,8 +1,8 @@
 package com.gatecrash.tenancy;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.Township;
 import com.gatecrash.user.AppUser;
@@ -44,7 +44,7 @@ class TenancyConstraintsTest extends AbstractIntegrationTest {
     private Township beta;
     private Gate alphaGate;
     private Gate betaGate;
-    private Flat alphaFlat;
+    private PropertyNode alphaFlat;
     private AppUser alphaGuard;
     private AppUser alphaResident;
 
@@ -97,12 +97,12 @@ class TenancyConstraintsTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("a visit cannot be routed to a flat in another township")
     void visitCannotBorrowAnotherTownshipsFlat() {
-        Flat betaFlat = data.flat(data.block(beta, "Block A"), "A-101");
+        PropertyNode betaFlat = data.flat(data.block(beta, "Block A"), "A-101");
 
         assertThatThrownBy(() -> insertVisit(alpha.getId(), alphaGate.getId(), alphaGuard.getId(),
                 betaFlat.getId(), alphaResident.getId()))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("visit_flat_same_township");
+                .hasMessageContaining("visit_unit_same_township");
     }
 
     @Test
@@ -129,11 +129,60 @@ class TenancyConstraintsTest extends AbstractIntegrationTest {
         UUID betaBlockId = data.block(beta, "Block C").getId();
 
         assertThatThrownBy(() -> jdbc.update("""
-                INSERT INTO flat (id, township_id, block_id, number)
-                VALUES (?, ?, ?, ?)
-                """, UUID.randomUUID(), alpha.getId(), betaBlockId, "C-301"))
+                INSERT INTO property_node (id, township_id, parent_id, depth, kind, name, code)
+                VALUES (?, ?, ?, 1, 'UNIT', ?, ?)
+                """, UUID.randomUUID(), alpha.getId(), betaBlockId, "C-301", "C-301"))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("flat_block_same_township");
+                .hasMessageContaining("property_node_parent_same_township");
+    }
+
+    @Test
+    @DisplayName("a resident cannot be filed under a floor or a whole building")
+    void residentMustAttachToAUnit() {
+        // The service layer resolves the unit level before it writes, but this is the backstop that
+        // holds when the service layer is bypassed entirely -- the composite key carries is_unit,
+        // so only a node at the addressable level satisfies it.
+        UUID alphaBlockId = data.block(alpha, "Block D").getId();
+
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO app_user (id, township_id, role, login_id, full_name, password_hash, flat_id)
+                VALUES (?, ?, 'RESIDENT', ?, 'Wrong Level', '!', ?)
+                """, UUID.randomUUID(), alpha.getId(), "wrong-level-1", alphaBlockId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("user_unit_same_township");
+    }
+
+    @Test
+    @DisplayName("nothing can be filed inside a unit -- a unit is always a leaf")
+    void aUnitCannotHaveChildren() {
+        UUID alphaUnitId = data.flat(data.block(alpha, "Block E"), "E-501").getId();
+
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO property_node (id, township_id, parent_id, depth, kind, name, code)
+                VALUES (?, ?, ?, 2, 'UNIT', ?, ?)
+                """, UUID.randomUUID(), alpha.getId(), alphaUnitId, "E-501-A", "E-501-A"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("cannot have children");
+    }
+
+    @Test
+    @DisplayName("unit codes are unique township-wide, because login ids derive from them")
+    void unitCodesAreUniquePerTownship() {
+        data.flat(data.block(alpha, "Block F"), "F-601");
+
+        // The old schema scoped this to the block, so two blocks could each hold a "101" and both
+        // mint the login id "101-1". Township-wide is what makes that derivation sound.
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO property_node (id, township_id, parent_id, depth, kind, name, code)
+                VALUES (?, ?, ?, 1, 'UNIT', ?, ?)
+                """, UUID.randomUUID(), alpha.getId(),
+                data.block(alpha, "Block G").getId(), "F-601", "f-601"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ux_node_unit_code");
+
+        // ...but the same code in another township is exactly what tenancy is for.
+        assertThatCode(() -> data.flat(data.block(beta, "Block F"), "F-601"))
+                .doesNotThrowAnyException();
     }
 
     // ----- per-tenant uniqueness ----------------------------------------------------------------
@@ -183,19 +232,19 @@ class TenancyConstraintsTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("block names collide across townships without conflict")
     void blockNamesAreUniquePerTownship() {
-        jdbc.update("INSERT INTO building_block (id, township_id, name) VALUES (?, ?, ?)",
-                UUID.randomUUID(), alpha.getId(), "Tower 9");
+        String insert = """
+                INSERT INTO property_node (id, township_id, parent_id, depth, kind, name)
+                VALUES (?, ?, NULL, 0, 'BUILDING', ?)
+                """;
+        jdbc.update(insert, UUID.randomUUID(), alpha.getId(), "Tower 9");
 
-        assertThatCode(() -> jdbc.update(
-                "INSERT INTO building_block (id, township_id, name) VALUES (?, ?, ?)",
-                UUID.randomUUID(), beta.getId(), "Tower 9")).doesNotThrowAnyException();
+        assertThatCode(() -> jdbc.update(insert, UUID.randomUUID(), beta.getId(), "Tower 9"))
+                .doesNotThrowAnyException();
 
-        // Case-insensitively, matching what TownshipService checks before it writes.
-        assertThatThrownBy(() -> jdbc.update(
-                "INSERT INTO building_block (id, township_id, name) VALUES (?, ?, ?)",
-                UUID.randomUUID(), alpha.getId(), "tower 9"))
+        // Case-insensitively, matching what PropertyService checks before it writes.
+        assertThatThrownBy(() -> jdbc.update(insert, UUID.randomUUID(), alpha.getId(), "tower 9"))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("ux_block_township_name");
+                .hasMessageContaining("ux_node_root_name");
     }
 
     // ----- the township row itself --------------------------------------------------------------

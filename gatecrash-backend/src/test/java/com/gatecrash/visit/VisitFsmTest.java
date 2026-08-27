@@ -1,10 +1,9 @@
 package com.gatecrash.visit;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.BuildingBlock;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.user.AppUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,8 +37,8 @@ class VisitFsmTest extends AbstractIntegrationTest {
     private VisitorLogRepository visits;
 
     private Gate gate;
-    private Flat flatA;
-    private Flat flatB;
+    private PropertyNode flatA;
+    private PropertyNode flatB;
     private AppUser guard;
     private AppUser residentA;
     private AppUser residentB;
@@ -48,7 +47,7 @@ class VisitFsmTest extends AbstractIntegrationTest {
     @BeforeEach
     void seed() {
         data.reset();
-        BuildingBlock block = data.block("Block A");
+        PropertyNode block = data.block("Block A");
         flatA = data.flat(block, "A-101");
         flatB = data.flat(block, "A-102");
         gate = data.gate("Main Gate");
@@ -252,7 +251,7 @@ class VisitFsmTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("a visit to a flat with no resident account is refused at the gate")
     void flatWithNoResidentIsRefused() throws Exception {
-        Flat empty = data.flat(data.block("Block B"), "B-201");
+        PropertyNode empty = data.flat(data.block("Block B"), "B-201");
 
         mockMvc.perform(post("/api/v1/visits")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard))

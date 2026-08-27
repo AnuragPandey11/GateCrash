@@ -98,6 +98,19 @@ export const en = {
     restoreConfirmTitle: 'Restore this township?',
     restoreConfirmBody: 'Everyone in {{name}} will be able to sign in again.',
     form: {
+      projectHeading: 'The developer’s project',
+      projectType: 'Project type',
+      projectTypeHint:
+        'Seeds the structure this developer’s console will use. Ask them what they build — a mall is not a housing block.',
+      projectTypePlaceholder: 'Choose a project type',
+      structure: 'Resulting structure',
+      structureLocked:
+        'This is the only easy moment to get it right — the shape can’t be changed once units exist. Names can be edited any time.',
+      unitLevelHint: 'The addressable level: where residents live and visitors are routed.',
+      customise: 'Customise',
+      usePreset: 'Use preset',
+      addLevel: 'Add level',
+      levelNamesRequired: 'Every level needs a name and a plural.',
       title: 'Create a township',
       subtitle:
         'A township and its first administrator are created together — a township with no admin cannot be set up by anyone inside it.',
@@ -157,6 +170,24 @@ export const en = {
   occupancy: {
     title: 'Live occupancy',
     subtitle: 'Everyone currently checked in across the township.',
+    /**
+     * Three different numbers that all used to share the word "occupancy". Kept apart on screen
+     * for the same reason they are kept apart in the API: a developer asking about occupancy means
+     * how much of the project is lived in, not how many guests are in the lobby right now.
+     */
+    summary: {
+      title: 'Property occupancy',
+      subtitle: 'How much of the project is lived in, and who is on site right now.',
+      units: 'Units',
+      occupiedUnits: '{{occupied}} of {{total}} occupied',
+      rate: 'Occupancy rate',
+      headcount: 'Residents',
+      headcountHint: 'People living here, including those without an app account.',
+      accounts: '{{count}} with a login',
+      accountsGap: '{{count}} cannot be notified yet',
+      visitorsInside: 'Visitors on site',
+      visitorsHint: 'Checked in at a gate right now.',
+    },
     insideCount_one: '{{count}} person inside',
     insideCount_other: '{{count}} people inside',
     empty: 'Nobody is currently inside',
@@ -381,40 +412,91 @@ export const en = {
       'A new temporary password is generated and shown once. Every session for this account is signed out immediately.',
   },
   township: {
-    title: 'Township',
-    subtitle: 'Blocks, flats and gates. Create and delete only — there are no edit endpoints.',
-    tabs: { blocks: 'Blocks', flats: 'Flats', gates: 'Gates' },
-    blocks: {
-      name: 'Block name',
-      flatCount_one: '{{count}} flat',
-      flatCount_other: '{{count}} flats',
-      add: 'Add block',
-      empty: 'No blocks yet. Add one before creating flats.',
-      deleteTitle: 'Delete block “{{name}}”?',
-      inUse: 'This block still has flats and can’t be removed.',
+    title: 'Property',
+    subtitle: 'The structure of this project, and the gates into it.',
+    /**
+     * Every label below that names a level is a template. The level words come from
+     * `GET /admin/property/profile`, so a villa developer reads "Add villa" and a high-rise reads
+     * "Add apartment" from the same string. `{{level}}` is the singular, `{{levels}}` the plural.
+     *
+     * Nomenclature is display-only on the client exactly as it is on the server: nothing here is
+     * ever compared against, only rendered.
+     */
+    node: {
+      name: '{{level}} name',
+      code: '{{level}} code',
+      codeHint: 'What a guard types at the gate. Resident login IDs are derived from it.',
+      storey: 'Storey',
+      storeyHint: 'Use 0 for ground, negative for basements. Sorts the floor list.',
+      add: 'Add {{level}}',
+      addIn: 'Add {{level}} in {{parent}}',
+      empty: 'No {{levels}} yet.',
+      emptyChild: 'No {{levels}} in {{parent}} yet.',
+      emptyFirst: 'No {{levels}} yet. Add one before creating {{children}}.',
+      childCount_one: '{{count}} {{level}}',
+      childCount_other: '{{count}} {{levels}}',
+      deleteTitle: 'Delete {{name}}?',
+      notEmpty: 'This still has things inside it and can’t be removed.',
+      occupied: 'This {{level}} has residents or visit history and can’t be removed.',
+      parent: '{{level}}',
+      allOf: 'All {{levels}}',
+      residents_one: '{{count}} resident account',
+      residents_other: '{{count}} resident accounts',
+      occupancy: 'Occupancy',
+      setOccupancy: 'Set occupancy',
     },
-    flats: {
-      number: 'Flat number',
-      block: 'Block',
-      add: 'Add flat',
-      addRange: 'Add a range',
-      empty: 'No flats in this block yet.',
-      deleteTitle: 'Delete flat {{name}}?',
-      inUse: 'This flat has residents or visit history and can’t be removed.',
-      range: {
-        title: 'Add a range of flats',
-        body: 'Creates flats one at a time so a partial failure is legible. Existing numbers are skipped.',
-        prefix: 'Prefix',
-        prefixHint: 'e.g. A- for A-101',
-        from: 'From',
-        to: 'To',
-        preview: 'Will create {{count}}: {{first}} … {{last}}',
-        invalid: '“To” must be greater than or equal to “From”.',
-        tooMany: 'At most {{max}} at a time.',
-        run: 'Create {{count}} flats',
-        running: 'Creating {{done}} of {{total}}…',
-        done: 'Created {{created}}, skipped {{skipped}}, failed {{failed}}.',
-      },
+    levels: {
+      title: 'Levels',
+      subtitle: 'What this project calls each level of its structure.',
+      manage: 'Edit level names',
+      singular: 'Singular',
+      plural: 'Plural',
+      kind: 'Kind',
+      depth: 'Depth',
+      rename: 'Rename level',
+      renameBody: 'Wording only. Nothing moves and nothing is re-filed — the structure is unchanged.',
+      locked: 'The shape of this project can only be changed while it has no structure. You can rename levels at any time.',
+      projectType: 'Project type',
+    },
+    occupancyDialog: {
+      title: 'Occupancy of {{name}}',
+      body: 'How many people live here, including anyone without an app account — a four-person household usually has one login.',
+      declared: 'People living here',
+      belowResidents: 'This {{level}} already has {{count}} resident accounts. Deactivate them first.',
+    },
+    bulk: {
+      add: 'Generate {{levels}}',
+      title: 'Generate {{levels}} in {{parent}}',
+      body: 'Creates everything in one go. If any name collides, nothing is created.',
+      floors: 'Floors',
+      from: 'From',
+      to: 'To',
+      perFloor: '{{levels}} per floor',
+      count: 'How many {{levels}}',
+      pattern: 'Code pattern',
+      /**
+       * Two hints, because a project without floors has no {floor} to interpolate and telling
+       * someone to use a placeholder that silently expands to nothing is worse than not mentioning
+       * it. {building} works in both and was previously undocumented.
+       */
+      patternHint:
+        'Use {unit} for the number and {building} for the {{parentLevel}} name. “{building}-{unit}” gives {{example}}.',
+      patternHintFloors:
+        'Use {floor}, {unit} and {building}. “A-{floor}{unit}” over floors 1–3 gives A-101, A-102, A-201…',
+      digits: 'Pad numbers to',
+      digitsHint: 'Zero-pads {unit} so codes sort correctly — unpadded, A-10 sorts before A-2.',
+      countHint: 'How many to create in {{parent}}.',
+      countHintFloors: 'How many on each floor.',
+      /** The codes themselves. A count alone does not tell anyone what they are about to create. */
+      preview: 'Will create {{floors}} floors and {{units}} {{levels}}:',
+      previewFlat: 'Will create {{units}} {{levels}}:',
+      previewCodes: '{{codes}}',
+      previewMore: '{{codes}} … {{last}}',
+      codeIsIdentity:
+        'This code is what a guard types at the gate, and the base of every resident login ID here.',
+      run: 'Generate',
+      running: 'Generating…',
+      done: 'Created {{floors}} floors and {{units}} {{levels}}.',
     },
     gates: {
       name: 'Gate name',
@@ -423,6 +505,7 @@ export const en = {
       deleteTitle: 'Delete gate “{{name}}”?',
       inUse: 'This gate has visit history and can’t be removed.',
     },
+    tabs: { gates: 'Gates' },
     deleteBody: 'This cannot be undone.',
   },
   status: {
@@ -485,10 +568,25 @@ export const en = {
     LOGIN_ID_TAKEN: 'That login ID is already in use.',
     EMAIL_TAKEN: 'That email address is already in use.',
     PHONE_TAKEN: 'That phone number is already in use.',
-    BLOCK_EXISTS: 'A block with that name already exists.',
-    BLOCK_NOT_EMPTY: 'This block still has flats and can’t be removed.',
-    FLAT_EXISTS: 'That flat number already exists in this block.',
-    FLAT_OCCUPIED: 'This flat has residents or visit history and can’t be removed.',
+    NODE_NAME_EXISTS: 'Something with that name already exists here.',
+    NODE_NOT_EMPTY: 'This still has things inside it and can’t be removed.',
+    UNIT_CODE_EXISTS:
+      'That code is already used in this project. Codes must be unique because resident login IDs are derived from them.',
+    UNIT_OCCUPIED: 'This has residents or visit history and can’t be removed.',
+    UNIT_IS_A_LEAF: 'Nothing can be filed inside a unit.',
+    NOT_A_UNIT: 'Residents and visits attach to the addressable level only.',
+    STOREY_EXISTS: 'That storey already exists in this building.',
+    STOREY_REQUIRED: 'A storey number is required — use 0 for ground.',
+    PROPERTY_TREE_NOT_EMPTY:
+      'The shape can only be changed while the project has no structure. Rename the levels instead.',
+    LEVEL_NOT_DEFINED: 'This project has no level defined there. Set up its levels first.',
+    UNIT_LEVEL_REQUIRED: 'Exactly one level must be the addressable unit level.',
+    UNIT_LEVEL_MUST_BE_LAST: 'The unit level must be the deepest — nothing is filed inside a home.',
+    FLOOR_NEEDS_BUILDING: 'A floor level must sit directly inside a building level.',
+    NO_FLOOR_LEVEL: 'This project has no floor level, so a floor range cannot be generated.',
+    OCCUPANCY_BELOW_RESIDENTS:
+      'Occupancy cannot be lower than the number of resident accounts already issued.',
+    OCCUPANCY_NOT_A_UNIT: 'Occupancy is recorded on units, not on buildings.',
     GATE_EXISTS: 'A gate with that name already exists.',
     CANNOT_DEACTIVATE_SELF: 'You can’t deactivate your own account.',
     WEAK_PASSWORD: 'That password is too easy to guess. Choose another.',

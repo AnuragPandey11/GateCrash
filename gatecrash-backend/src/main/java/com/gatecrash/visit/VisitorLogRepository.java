@@ -35,7 +35,7 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
            select v from VisitorLog v
              join fetch v.gate
              left join fetch v.approver
-             left join fetch v.targetFlat
+             left join fetch v.targetUnit
             where v.id = :id and v.township.id = :townshipId
            """)
     Optional<VisitorLog> findDetailedById(@Param("id") UUID id,
@@ -52,7 +52,7 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
            select v from VisitorLog v
              join fetch v.gate
              left join fetch v.approver
-             left join fetch v.targetFlat
+             left join fetch v.targetUnit
             where v.id = :id
            """)
     Optional<VisitorLog> findDetailedByIdUnscoped(@Param("id") UUID id);
@@ -64,7 +64,7 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
     List<VisitorLog> findByApprover_IdAndStatusOrderByCreatedAtDesc(UUID approverId, VisitStatus status);
 
     /** A resident's inbox: anything pending on their flat, whoever the nominated approver is. */
-    List<VisitorLog> findByTargetFlat_IdAndStatusOrderByCreatedAtDesc(UUID flatId, VisitStatus status);
+    List<VisitorLog> findByTargetUnit_IdAndStatusOrderByCreatedAtDesc(UUID unitId, VisitStatus status);
 
     List<VisitorLog> findByTownship_IdAndStatusOrderByCheckedInAtDesc(UUID townshipId, VisitStatus status);
 

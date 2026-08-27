@@ -58,7 +58,9 @@ gatecrash-backend/
     │   ├── tenant/ (TenantContext, TenantContextFilter)   # the acting township -- §5.5
     │   └── audit/ (AuditService, AuditAspect)
     ├── user/         (AppUser, enums, repo, dto, UserService, AdminUserController, AuthController, AuthService)
-    ├── township/     (Township, TownshipStatus, BuildingBlock, Flat, Gate + repos + AdminTownshipController)
+    ├── township/     (Township, TownshipStatus, Gate + repos + AdminTownshipController)
+    ├── property/     (PropertyNode, PropertyLevel, PropertyNodeKind, PropertyType,
+    │                  PropertyService, OccupancyService, AdminPropertyController)
     ├── platform/     (TownshipLifecycleService, SuperAdminService, SuperAdminController, dto)  # /api/v1/super
     ├── device/       (Device, DeviceRepository, DeviceController, DeviceService)
     ├── visit/        (VisitorLog, VisitService, VisitController, dto, VisitEventPublisher)
@@ -369,7 +371,8 @@ public class AppUser {
     private boolean mustResetPassword = true;
     private boolean active = true;
 
-    @ManyToOne(fetch = LAZY) @JoinColumn(name = "flat_id") private Flat flat;
+    // Column still named flat_id; it references property_node now. See V4.
+    @ManyToOne(fetch = LAZY) @JoinColumn(name = "flat_id") private PropertyNode unit;
     private boolean onDuty = false;                 // SALES presence
 
     @ManyToOne(fetch = LAZY) @JoinColumn(name = "created_by") private AppUser createdBy;
@@ -387,8 +390,8 @@ Key repository queries:
 // SALES dropdown for guards
 List<AppUser> findByRoleAndOnDutyTrueAndActiveTrue(UserRole role);
 
-// next per-flat login_id sequence (see UserProvisioningService)
-long countByFlat_Id(UUID flatId);
+// next per-unit login_id sequence (see UserProvisioningService)
+long countByUnit_Id(UUID unitId);
 
 // approver inbox
 List<VisitorLog> findByApprover_IdAndStatus(UUID approverId, VisitStatus status);
@@ -462,7 +465,9 @@ public record AudienceRule(
    paths: `ADMIN` needs `SUPER_ADMIN` (`403 ADMIN_REQUIRES_SUPER_ADMIN`), because an admin who could
    mint further admins would make the platform operator's control over the tenant advisory; and
    `SUPER_ADMIN` outright (`422 ROLE_NOT_PROVISIONABLE`), because it belongs to no township at all.
-2. If `RESIDENT`: require `flatId`; derive `login_id = flat.number + "-" + (countByFlat_Id(flatId)+1)`
+2. If `RESIDENT`: require `flatId`; resolve it as a node at the **unit level** (`requireUnit`, else
+   `422 NOT_A_UNIT`); derive `login_id = unit.code + "-" + (countByUnit_Id(unitId)+1)`; then raise the
+   unit's `declared_occupancy` to at least that account count, so occupancy never falls behind
    (e.g. `A-101-1`, then `A-101-2`) — unique within the township only. If `SALES/GUARD/ADMIN`: require
    the supplied `loginId`, ensure unique **within the township**. Phone and email uniqueness is
    likewise per township: a global check would leak across the boundary, since "that number is
@@ -529,8 +534,8 @@ visit itself — so an id from another township is a `404` before the ownership 
 | `ALL` | `is_active` |
 | `ALL_EXCEPT` | `role NOT IN (:roles)` |
 | `ROLES` | `role IN (:roles)` |
-| `FLATS` | `flat_id IN (:flatIds)` |
-| `BLOCKS` | `flat_id IN (SELECT id FROM flat WHERE block_id IN (:blockIds))` |
+| `FLATS` | `flat_id IN (:flatIds)` — unit ids |
+| `BLOCKS` | everyone anywhere *beneath* the named nodes, via the materialized path: `EXISTS (SELECT 1 FROM property_node a WHERE a.id IN (:blockIds) AND unit.path LIKE a.path \|\| '%')`. Outgrew its name in V4 — name a tower and it reaches every flat in it, name a phase and it reaches the whole phase |
 
 `send(req)`:
 1. `resolve(rule)` → user ids. Persist `notification` (rule as JSONB) + one `notification_recipient` per user
@@ -715,5 +720,17 @@ and the RBAC **and tenancy** negative tests green before moving on.
 - **Never widen `@PreAuthorize` to reach across townships.** Role and tenant are independent
   questions; a `SUPER_ADMIN` gets its breadth from the `ROLE_ADMIN` authority plus an explicit
   `X-Township-Id`, not from an annotation that skips the boundary.
+- **Nomenclature is never load-bearing.** A level's `singular`/`plural` are display strings; every
+  decision in code branches on `PropertyNodeKind` instead. The moment a query matches on a label,
+  renaming "Flat" to "Villa" in the console silently changes which rows it returns.
+- **`depth`, `path` and `is_unit` on `property_node` are derived by database trigger, never set from
+  Java.** They are mapped `insertable = false, updatable = false`. A hand-maintained path that drifts
+  does not fail loudly — it silently sends a notification to the wrong tower.
+- **Residents and visits attach to the unit level only.** Resolve with `requireUnit`, not
+  `requireNode`. The composite `(id, township_id, is_unit)` foreign key is the backstop, but a `422`
+  naming the problem beats a foreign-key violation surfacing as a `500`.
+- **Occupancy is a unit-level fact.** A building's occupancy is the sum of its units and is never
+  stored; `declared_occupancy` is people (including those with no login), not accounts, and may
+  never sit below the unit's active resident account count.
 - **A township is archived, never deleted.** No cascade, no purge endpoint, no cleanup job: the
   visitor log and audit trail are the record of who was let through a gate and who authorised it.

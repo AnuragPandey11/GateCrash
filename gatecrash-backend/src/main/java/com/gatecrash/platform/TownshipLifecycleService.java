@@ -14,7 +14,10 @@ import com.gatecrash.platform.dto.PlatformDtos.TownshipAdminRequest;
 import com.gatecrash.platform.dto.PlatformDtos.TownshipResponse;
 import com.gatecrash.platform.dto.PlatformDtos.UpdateTownshipRequest;
 import com.gatecrash.security.SecurityUtils;
-import com.gatecrash.township.BuildingBlockRepository;
+import com.gatecrash.property.PropertyNodeKind;
+import com.gatecrash.property.PropertyNodeRepository;
+import com.gatecrash.property.PropertyService;
+import com.gatecrash.property.PropertyType;
 import com.gatecrash.township.GateRepository;
 import com.gatecrash.township.Township;
 import com.gatecrash.township.TownshipRepository;
@@ -76,7 +79,8 @@ public class TownshipLifecycleService {
 
     private final TownshipRepository townships;
     private final AppUserRepository users;
-    private final BuildingBlockRepository blocks;
+    private final PropertyNodeRepository nodes;
+    private final PropertyService property;
     private final GateRepository gates;
     private final UserProvisioningService provisioning;
     private final RefreshTokenService refreshTokens;
@@ -100,7 +104,22 @@ public class TownshipLifecycleService {
         township.setContactPhone(blankToNull(request.contactPhone()));
         township.setStatus(TownshipStatus.ACTIVE);
         township.setCreatedBy(SecurityUtils.currentUserId());
+        PropertyType type = request.propertyType() == null ? PropertyType.APARTMENT : request.propertyType();
+        township.setPropertyType(type);
         townships.saveAndFlush(township);
+
+        // Seed the level set before the admin exists, so their very first visit to the structure
+        // screen already speaks their vocabulary. Without this a new township opens on an empty
+        // tree with no indication of what shape it is supposed to take.
+        //
+        // An explicit level set wins over the type's preset: the presets are a starting point for
+        // the common shapes, and a super admin who has actually asked the developer how their
+        // project is laid out knows better than a dropdown does.
+        if (request.levels() != null && !request.levels().isEmpty()) {
+            property.seedLevelsFor(township, request.levels());
+        } else {
+            property.seedLevelsFor(township, type);
+        }
 
         CreatedUserResponse admin = provisionAdmin(township, request.admin());
 
@@ -289,7 +308,9 @@ public class TownshipLifecycleService {
                 township.getContactPhone(),
                 townships.countActiveUsers(id),
                 users.countByTownship_IdAndRoleAndActiveTrue(id, UserRole.ADMIN),
-                blocks.countByTownship_Id(id),
+                nodes.findByTownship_IdAndDepthOrderByNameAsc(id, 0).size(),
+                nodes.countByTownship_IdAndKind(id, PropertyNodeKind.UNIT),
+                township.getPropertyType(),
                 gates.countByTownship_Id(id),
                 township.getCreatedAt(),
                 township.getArchivedAt());

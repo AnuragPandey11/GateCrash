@@ -1,7 +1,7 @@
 import {
   createUserRequestSchema,
   useCreateUser,
-  useFlats,
+  usePropertyNodes,
   type CreateUserRequest,
   type CreatedUserResponse,
 } from '@gatecrash/api';
@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { applyFieldErrors, toastError } from '@/lib/errors';
+import { useNomenclature } from '@/features/property/use-nomenclature';
 
 /**
  * Account provisioning — FRONTEND.md §8.7.
@@ -50,7 +51,13 @@ export function CreateUserDialog({
   onCreated: (user: CreatedUserResponse) => void;
 }) {
   const { t } = useTranslation();
-  const flats = useFlats();
+  // Depth is read from the level set rather than hardcoded: a resident lives at the addressable
+  // level, which is depth 1 in a Block -> Flat project and depth 2 in Tower -> Floor -> Flat.
+  const nom = useNomenclature();
+  const flats = usePropertyNodes(
+    { depth: nom.unitLevel?.depth ?? null },
+    { enabled: nom.unitLevel != null },
+  );
   const create = useCreateUser();
 
   const form = useForm<CreateUserRequest>({
@@ -64,9 +71,10 @@ export function CreateUserDialog({
   const flatsByBlock = useMemo(() => {
     const groups = new Map<string, { name: string; flats: { id: string; number: string }[] }>();
     for (const flat of flats.data ?? []) {
-      const group = groups.get(flat.blockId) ?? { name: flat.blockName, flats: [] };
-      group.flats.push({ id: flat.id, number: flat.number });
-      groups.set(flat.blockId, group);
+      const key = flat.containerName ?? '';
+      const group = groups.get(key) ?? { name: key, flats: [] };
+      group.flats.push({ id: flat.id, number: flat.code ?? flat.name });
+      groups.set(key, group);
     }
     return groups;
   }, [flats.data]);

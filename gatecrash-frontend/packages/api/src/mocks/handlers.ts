@@ -5,6 +5,9 @@ import {
   apiError,
   blocksFixture,
   flatsFixture,
+  occupancySummaryFixture,
+  propertyProfileFixture,
+  propertyTypesFixture,
   gatesFixture,
   insideVisitFixture,
   loginResponseFixture,
@@ -185,38 +188,59 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
       HttpResponse.json({ ...usersFixture[0], active: true }),
     ),
 
-    // ── Township ────────────────────────────────────────────────────────────────────────────
-    http.get(url('/admin/blocks', base), () => HttpResponse.json(blocksFixture)),
-    http.post(url('/admin/blocks', base), async ({ request }) => {
-      const body = (await request.json()) as { name: string };
-      return HttpResponse.json(
-        { id: IDS.blockA, name: body.name, flatCount: 0, createdAt: '2026-07-23T14:30:00+05:30' },
-        { status: 201 },
-      );
-    }),
-    http.delete(url('/admin/blocks/:id', base), () => new HttpResponse(null, { status: 204 })),
+    http.get(url('/super/property-types', base), () => HttpResponse.json(propertyTypesFixture)),
 
-    http.get(url('/admin/flats', base), ({ request }) => {
-      const blockId = new URL(request.url).searchParams.get('blockId');
-      return HttpResponse.json(
-        blockId ? flatsFixture.filter((f) => f.blockId === blockId) : flatsFixture,
-      );
+    // ── Property tree ───────────────────────────────────────────────────────────────────────
+    http.get(url('/admin/property/profile', base), () => HttpResponse.json(propertyProfileFixture)),
+    http.get(url('/admin/property/occupancy', base), () =>
+      HttpResponse.json(occupancySummaryFixture),
+    ),
+    // depth/parentId are the two ways the console reads the tree: a whole level, or one node's
+    // children. The fixture tree is two levels, so both resolve to blocks or flats.
+    http.get(url('/admin/property/nodes', base), ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const depth = params.get('depth');
+      const parentId = params.get('parentId');
+      if (depth === '0') return HttpResponse.json(blocksFixture);
+      if (depth === '1') return HttpResponse.json(flatsFixture);
+      if (parentId) return HttpResponse.json(flatsFixture.filter((f) => f.parentId === parentId));
+      return HttpResponse.json([...blocksFixture, ...flatsFixture]);
     }),
-    http.post(url('/admin/flats', base), async ({ request }) => {
-      const body = (await request.json()) as { blockId: string; number: string };
+    http.post(url('/admin/property/nodes', base), async ({ request }) => {
+      const body = (await request.json()) as { parentId?: string | null; name: string; code?: string };
       return HttpResponse.json(
         {
-          id: `${IDS.flatA101.slice(0, -1)}${(body.number.length % 10).toString(16)}`,
-          number: body.number,
-          blockId: body.blockId,
-          blockName: 'Block A',
+          id: IDS.blockA,
+          parentId: body.parentId ?? null,
+          depth: body.parentId ? 1 : 0,
+          kind: body.parentId ? 'UNIT' : 'BUILDING',
+          name: body.name,
+          code: body.parentId ? (body.code ?? body.name) : null,
+          levelNumber: null,
+          declaredOccupancy: 0,
+          residentAccounts: 0,
+          childCount: 0,
           createdAt: '2026-07-23T14:30:00+05:30',
         },
         { status: 201 },
       );
     }),
-    http.delete(url('/admin/flats/:id', base), () => new HttpResponse(null, { status: 204 })),
+    http.delete(
+      url('/admin/property/nodes/:id', base),
+      () => new HttpResponse(null, { status: 204 }),
+    ),
+    http.put(url('/admin/property/nodes/:id/occupancy', base), async ({ request }) => {
+      const body = (await request.json()) as { declaredOccupancy: number };
+      return HttpResponse.json({ ...flatsFixture[0], declaredOccupancy: body.declaredOccupancy });
+    }),
+    http.post(url('/admin/property/nodes/bulk', base), () =>
+      HttpResponse.json({ floorsCreated: 0, unitsCreated: 2, codes: ['A-201', 'A-202'] }, { status: 201 }),
+    ),
+    http.patch(url('/admin/property/levels/:id', base), () =>
+      HttpResponse.json(propertyProfileFixture),
+    ),
 
+    // ── Gates ───────────────────────────────────────────────────────────────────────────────
     http.get(url('/admin/gates', base), () => HttpResponse.json(gatesFixture)),
     http.post(url('/admin/gates', base), async ({ request }) => {
       const body = (await request.json()) as { name: string };

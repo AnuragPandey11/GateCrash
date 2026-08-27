@@ -52,7 +52,7 @@ Non-negotiable product facts that shape every screen:
 | Role | Home | Screens |
 |---|---|---|
 | `SUPER_ADMIN` (web) | Township list | Township list · Onboarding wizard (township + first admin) · Township detail (admins, suspend/archive/restore) · Platform operators · **plus every `ADMIN` screen below**, scoped to the township selected in the shell switcher |
-| `ADMIN` (web) | Live occupancy | Occupancy board · Visitor log (filter/export) · Notification composer + history · Community posts · Users · Township (blocks/flats/gates) |
+| `ADMIN` (web) | Live occupancy | Occupancy board · Visitor log (filter/export) · Notification composer + history · Community posts · Users · Property (per-project levels/gates) |
 | `GUARD` (mobile) | Gate console | Gate picker · Log walk-in · Awaiting-decision · Scan/keypad redeem · Gate activity feed (check-in/out) |
 | `RESIDENT` (mobile) | Approvals | Pending approvals · Visit history · My passes + create pass · Community feed · Inbox |
 | `SALES` (mobile) | Approvals | Duty toggle · Pending client approvals · My passes + create pass · Community feed · Inbox |
@@ -221,7 +221,7 @@ Note `page` is **zero-based** while every table UI wants 1-based. Convert in exa
 notifications 25) — pass `size` explicitly rather than relying on them.
 
 Endpoints returning a **plain array**, not a page: `GET /visits/pending`, `GET /visits/gate/{gateId}`,
-`GET /sales/on-duty`, `GET /devices`, `GET /admin/blocks|flats|gates`. Don't build a paginator for those.
+`GET /sales/on-duty`, `GET /devices`, `GET /admin/property/**`, `GET /admin/gates`. Don't build a paginator for those.
 
 ### 4.5 Error envelope
 
@@ -263,7 +263,8 @@ Codes emitted by `GlobalExceptionHandler` and the security filters:
 ```ts
 type Brand<K, T> = K & { readonly __brand: T };
 export type UserId  = Brand<string, 'UserId'>;
-export type FlatId  = Brand<string, 'FlatId'>;
+export type PropertyNodeId = Brand<string, 'PropertyNodeId'>;
+export type FlatId  = PropertyNodeId;   // a unit is a node; the API still says flatId
 export type GateId  = Brand<string, 'GateId'>;
 export type VisitId = Brand<string, 'VisitId'>;
 export type PassId  = Brand<string, 'PassId'>;
@@ -338,11 +339,17 @@ Everything the clients may call. `A`=ADMIN, `G`=GUARD, `R`=RESIDENT, `S`=SALES.
 > Typed in `packages/api/src/endpoints/platform.ts`, with hooks in `queries/hooks.ts`. The console
 > that drives them is `/townships` — see §8.9. The `/super/admins` group has no screen yet.
 
-**Township** — `POST/DELETE /admin/blocks|flats|gates` (A) · `GET /admin/blocks` · `GET /admin/flats?blockId` ·
+**Property** — `GET /admin/property/profile` (A,G) — **the levels and their labels; render structure
+tabs from this, never from hardcoded "Blocks"/"Flats"** · `GET /admin/property/nodes?parentId|depth`
+(A,G) · `POST/PATCH/DELETE /admin/property/nodes` (A) · `POST /admin/property/nodes/bulk` (A) ·
+`PUT /admin/property/nodes/{id}/occupancy` (A) · `GET /admin/property/occupancy` (A) ·
+`PUT /admin/property/levels` (A) · `PATCH /admin/property/levels/{id}` (A) · `GET /admin/property/types` (A)
+
+**Gates** — `POST/DELETE /admin/gates` (A) ·
 `GET /admin/gates` — **`A` and `G`**
 
 > ⚠️ That last row is the non-obvious one: `TownshipService` authorises the three *list* methods for
-> `ADMIN, GUARD`. The guard app reads `/api/v1/admin/gates` and `/api/v1/admin/flats` despite the
+> `ADMIN, GUARD`. The guard app reads `/api/v1/admin/gates` and `/api/v1/admin/property/nodes` despite the
 > `/admin` path prefix. Don't let a well-meaning route guard block it because the URL says "admin".
 
 ### 4.9 Query key factory
@@ -364,8 +371,11 @@ export const qk = {
     inside:        ['admin', 'inside'] as const,
     visits:  (f: VisitFilters) => ['admin', 'visits', f] as const,
     users:   (f: UserFilters)  => ['admin', 'users', f] as const,
-    blocks:        ['admin', 'blocks'] as const,
-    flats:   (b?: BlockId) => ['admin', 'flats', b ?? 'all'] as const,
+    propertyAll:   ['admin', 'property'] as const,   // invalidation root for every write
+    propertyProfile: ['admin', 'property', 'profile'] as const,
+    propertyNodes: (parentId?: PropertyNodeId | null, depth?: number | null) =>
+      ['admin', 'property', 'nodes', parentId ?? 'any', depth ?? 'any'] as const,
+    propertyOccupancy: ['admin', 'property', 'occupancy'] as const,
     gates:         ['admin', 'gates'] as const,
     notifications: (p: PageArgs) => ['admin', 'notifications', p] as const,
   },
@@ -695,7 +705,7 @@ township name, connection pill (§10.4), admin name, sign-out. Content max-width
 /notifications               composer + history tabs
 /community                   list + composer
 /users                       list, create dialog, detail drawer
-/township                    blocks / flats / gates
+/township                    one tab per property level (from the profile) / gates / levels
 *                            404
 ```
 
@@ -751,8 +761,10 @@ Two-pane: compose left, **live audience preview right**.
    - `ALL_EXCEPT` — role checkboxes (≤4).
    - `ROLES` — role checkboxes (≤4).
    - `FLATS` — flat multi-select grouped by block, with "select all in block" (≤2000).
-   - `BLOCKS` — block checkboxes (≤2000 flats' worth; ≤200 blocks).
-   Flats/blocks come from `GET /admin/flats` / `GET /admin/blocks`.
+   - `BLOCKS` — outermost-level checkboxes (≤2000 units' worth; ≤200 nodes). The mode outgrew its
+     name server-side: it now means "everyone anywhere beneath these nodes", at any depth, so it
+     works for towers, clusters and phases alike.
+   Units and containers both come from `GET /admin/property/nodes` (by `depth`).
 3. **Preview count** — `POST /notifications/preview` with the rule, **debounced 400ms**, rendering
    `AudiencePreviewResponse { recipientCount, deviceCount }` as
    "**312 people** · 487 devices". Show `recipientCount - (people with 0 devices)` implicitly by
@@ -798,17 +810,27 @@ clearly labelled. Don't build an uploader against an endpoint that doesn't exist
 
 ### 8.8 Township (`/township`)
 
-Three tabs. Blocks (`name`, shows `flatCount`), Flats (`blockId` + `number`, filterable by block), Gates
+**The tab strip is data, not markup.** It comes from `GET /admin/property/profile`: one tab per
+level, labelled with that level's `plural`, then Gates, then Levels. A villa community renders
+Clusters | Villas | Gates | Levels; a high-rise renders Towers | Floors | Flats | Gates | Levels —
+out of the same component. Never hardcode a level name; interpolate `{{level}}`/`{{levels}}` from
+`useNomenclature()`.
+
+Each level tab lists that depth. Depth 0 lists roots; deeper tabs first ask which parent, because
+"all the floors in the project" is not something a unit gets filed into. Unit rows carry declared
+occupancy and resident-account count side by side. Legacy: Gates
 (`name`). Create + delete only — the backend has no update endpoints. Delete will `409` if referenced;
 surface that as "This flat has residents or visit history and can't be removed."
 
 Bulk flat creation is the one quality-of-life feature worth building client-side: a "add A-101 … A-110"
-range helper that fires N sequential `POST /admin/flats` with a progress bar and a per-row result list.
+bulk generator posting once to `POST /admin/property/nodes/bulk`. That endpoint is one transaction,
+so unlike the old sequential loop there is no partial state to report — either the tower exists as
+specified or nothing was created.
 Sequential, not parallel — don't hammer the box, and partial failure must be legible.
 
 ### 8.9 Platform console (`/townships`, `SUPER_ADMIN` only)
 
-Note the two similar names: **§8.8 `/township`** is the *inside* of one township — its blocks, flats
+Note the two similar names: **§8.8 `/township`** is the *inside* of one township — its structure
 and gates. **This** screen is the platform: the townships themselves.
 
 A table of townships (code, name, status, admin and user counts) with an archived filter that is off
@@ -903,7 +925,8 @@ with a long-press to change. The STOMP subscription to `/topic/gate/{gateId}` fo
    - `CLIENT` → **must** route to a sales agent: `GET /sales/on-duty` list. If it's empty, say so plainly
      ("No sales agent is on duty") and offer only "log as Guest to a flat" — do not let the guard submit
      a client visit that the DB `CHECK` will reject.
-   - everything else → flat picker over `GET /admin/flats`, with a **numeric-first search** (typing "101"
+   - everything else → unit picker over `GET /admin/property/nodes?depth=<unit level>`, grouped by
+     `containerName`, with a **numeric-first search** (typing "101"
      matches A-101, B-101) and recents. This is the single highest-friction interaction in the product;
      invest in it.
 3. **Details** — `visitorName` (required), `visitorPhone`, `vehicleNo`. Phone keypad for phone, `characters`
@@ -1418,8 +1441,15 @@ InboxItemResponse       { id, notificationId, title, body, read, readAt?, sentAt
 UnreadCountResponse     { unread }
 
 PostResponse    { id, title, body, imageUrl?, pinned, authorName, publishedAt }
-BlockResponse   { id, name, flatCount, createdAt }
-FlatResponse    { id, number, blockId, blockName, createdAt }
+PropertyProfileResponse { propertyType, propertyTypeLabel, hasFloors, levels[] }
+PropertyLevelResponse   { id, depth, kind, singular, plural, nodeCount }
+PropertyNodeResponse    { id, depth, kind, name, declaredOccupancy, residentAccounts, childCount,
+                          createdAt, parentId?, code?, levelNumber?, containerName? }
+OccupancySummaryResponse{ totalUnits, occupiedUnits, vacantUnits, occupancyRate,
+                          residentHeadcount, registeredResidentAccounts, visitorsInside }
+
+> Nullable fields are marked `?` deliberately: the API runs `default-property-inclusion: non_null`,
+> so a null is **omitted from the payload**, not sent as `null`. A root node has no `parentId` key.
 GateResponse    { id, name, createdAt }
 DeviceResponse  { id, platform, lastSeenAt, createdAt }                   // token never echoed
 ```

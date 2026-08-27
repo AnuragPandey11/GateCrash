@@ -274,7 +274,7 @@ public class PassService {
         visit.setApprover(creator);
         visit.setApproverKind(pass.getApproverKind());
         // Resident-minted passes carry the flat through so the visit shows up in the flat's history.
-        visit.setTargetFlat(pass.getApproverKind() == ApproverKind.RESIDENT ? creator.getFlat() : null);
+        visit.setTargetUnit(pass.getApproverKind() == ApproverKind.RESIDENT ? creator.getUnit() : null);
         visit.setPreApproval(pass);
         visit.setStatus(VisitStatus.CHECKED_IN);
         visit.setDecidedAt(OffsetDateTime.now());

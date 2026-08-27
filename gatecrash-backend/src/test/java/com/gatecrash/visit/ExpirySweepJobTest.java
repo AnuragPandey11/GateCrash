@@ -1,11 +1,11 @@
 package com.gatecrash.visit;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.pass.PassStatus;
 import com.gatecrash.pass.PreApproval;
 import com.gatecrash.pass.PreApprovalRepository;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.user.AppUser;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +42,7 @@ class ExpirySweepJobTest extends AbstractIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     private Gate gate;
-    private Flat flat;
+    private PropertyNode flat;
     private AppUser guard;
     private AppUser resident;
 

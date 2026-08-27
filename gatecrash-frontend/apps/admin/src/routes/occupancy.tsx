@@ -1,4 +1,4 @@
-import { useOccupancy, type VisitResponse } from '@gatecrash/api';
+import { useOccupancy, usePropertyOccupancy, type VisitResponse } from '@gatecrash/api';
 import {
   CLIENT_LIMITS,
   VISITOR_TYPES,
@@ -16,6 +16,61 @@ import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
+
+/**
+ * How much of the project is lived in — the number a developer means by "occupancy".
+ *
+ * Deliberately a separate card above the live board, because the two answer different questions
+ * and used to share a word. The board below counts *visitors currently at the gate*; this counts
+ * *units that are lived in* and *people who live in them*. Collapsing them into one headline is
+ * how a developer ends up reading their sales occupancy off the lobby.
+ *
+ * Registered logins are shown against the headcount rather than instead of it: the gap between
+ * them is how many residents cannot yet be reached by a notification, which is actionable in a way
+ * that neither number is alone.
+ */
+function PropertyOccupancyCard() {
+  const { t } = useTranslation();
+  const summary = usePropertyOccupancy();
+
+  if (summary.isPending || summary.isError || !summary.data) return null;
+
+  const s = summary.data;
+  const notReachable = s.residentHeadcount - s.registeredResidentAccounts;
+  const percent = Math.round(s.occupancyRate * 100);
+
+  return (
+    <Card className="mb-4">
+      <CardContent className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-3xl font-semibold tabular-nums text-text">{percent}%</p>
+          <p className="text-sm text-text-muted">{t('occupancy.summary.rate')}</p>
+          <p className="text-xs text-text-muted">
+            {t('occupancy.summary.occupiedUnits', {
+              occupied: s.occupiedUnits,
+              total: s.totalUnits,
+            })}
+          </p>
+        </div>
+        <div>
+          <p className="text-3xl font-semibold tabular-nums text-text">{s.residentHeadcount}</p>
+          <p className="text-sm text-text-muted">{t('occupancy.summary.headcount')}</p>
+          <p className="text-xs text-text-muted">
+            {t('occupancy.summary.accounts', { count: s.registeredResidentAccounts })}
+            {notReachable > 0
+              ? ` · ${t('occupancy.summary.accountsGap', { count: notReachable })}`
+              : ''}
+          </p>
+        </div>
+        <div>
+          <p className="text-3xl font-semibold tabular-nums text-text">{s.visitorsInside}</p>
+          <p className="text-sm text-text-muted">{t('occupancy.summary.visitorsInside')}</p>
+          <p className="text-xs text-text-muted">{t('occupancy.summary.visitorsHint')}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * The occupancy board — FRONTEND.md §8.3. The hero screen.
@@ -80,6 +135,8 @@ export function OccupancyRoute() {
   return (
     <>
       <PageHeader title={t('occupancy.title')} description={t('occupancy.subtitle')} />
+
+      <PropertyOccupancyCard />
 
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center justify-between gap-4">

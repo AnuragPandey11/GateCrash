@@ -1,9 +1,9 @@
 package com.gatecrash.security;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.user.AppUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,7 +42,7 @@ class RbacNegativeTest extends AbstractIntegrationTest {
     private AppUser guard;
     private AppUser resident;
     private AppUser sales;
-    private Flat flat;
+    private PropertyNode flat;
 
     @BeforeEach
     void seed() {

@@ -1,9 +1,9 @@
 package com.gatecrash.pass;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.visit.VisitStatus;
@@ -42,7 +42,7 @@ class PassRedemptionTest extends AbstractIntegrationTest {
     private VisitorLogRepository visits;
 
     private Gate gate;
-    private Flat flat;
+    private PropertyNode flat;
     private AppUser guard;
     private AppUser resident;
 

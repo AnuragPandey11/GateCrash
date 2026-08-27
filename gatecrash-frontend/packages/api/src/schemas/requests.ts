@@ -1,4 +1,9 @@
-import { AUDIENCE_LIMITS, SERVER_DEFAULTS, type AudienceRule } from '@gatecrash/core';
+import {
+  AUDIENCE_LIMITS,
+  PROPERTY_NODE_KINDS,
+  SERVER_DEFAULTS,
+  type AudienceRule,
+} from '@gatecrash/core';
 import { z } from 'zod';
 import { audienceModeSchema, decisionSchema, devicePlatformSchema, userRoleSchema, visitorTypeSchema } from './enums';
 
@@ -227,16 +232,71 @@ export type CreatePostRequest = z.infer<typeof createPostRequestSchema>;
 
 // ── Township ────────────────────────────────────────────────────────────────────────────────
 
-export const createBlockRequestSchema = z.object({
-  name: z.string().trim().min(1, 'Enter a block name.').max(80),
-});
-export const createFlatRequestSchema = z.object({
-  blockId: z.string().uuid(),
-  number: z.string().trim().min(1, 'Enter a flat number.').max(40),
-});
 export const createGateRequestSchema = z.object({
   name: z.string().trim().min(1, 'Enter a gate name.').max(80),
 });
+
+// ── Property tree ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * `kind` is absent on purpose: the server derives it from the level the node lands at, so a client
+ * cannot file a floor where the project defines a unit. Send the parent and the name; the shape of
+ * the tree decides the rest.
+ */
+export const createNodeRequestSchema = z.object({
+  parentId: z.string().uuid().nullable().optional(),
+  name: z.string().trim().min(1, 'Enter a name.').max(80),
+  /** Required at the unit level; the server defaults it to the name when omitted. */
+  code: z.string().trim().max(40).optional(),
+  /** Required at a floor level, rejected elsewhere. */
+  levelNumber: z.number().int().min(-10).max(200).nullable().optional(),
+  declaredOccupancy: z.number().int().min(0).max(64).optional(),
+});
+export type CreateNodeRequest = z.infer<typeof createNodeRequestSchema>;
+
+export const updateNodeRequestSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a name.').max(80),
+  code: z.string().trim().max(40).optional(),
+  levelNumber: z.number().int().min(-10).max(200).nullable().optional(),
+});
+export type UpdateNodeRequest = z.infer<typeof updateNodeRequestSchema>;
+
+const levelSpecSchema = z.object({
+  kind: z.enum(PROPERTY_NODE_KINDS),
+  singular: z.string().trim().min(1).max(40),
+  plural: z.string().trim().min(1).max(40),
+});
+
+/**
+ * Whole-set, matching the endpoint: the levels are ordered and contiguous, so expressing a reshape
+ * as independent per-level edits would let a caller stop halfway and leave the tree describing a
+ * shape it no longer has.
+ */
+export const defineLevelsRequestSchema = z.object({
+  levels: z.array(levelSpecSchema).min(1).max(6),
+});
+export type DefineLevelsRequest = z.infer<typeof defineLevelsRequestSchema>;
+
+export const renameLevelRequestSchema = z.object({
+  singular: z.string().trim().min(1, 'Enter a name.').max(40),
+  plural: z.string().trim().min(1, 'Enter a plural.').max(40),
+});
+export type RenameLevelRequest = z.infer<typeof renameLevelRequestSchema>;
+
+export const setOccupancyRequestSchema = z.object({
+  declaredOccupancy: z.number().int().min(0).max(64),
+});
+export type SetOccupancyRequest = z.infer<typeof setOccupancyRequestSchema>;
+
+export const bulkCreateRequestSchema = z.object({
+  buildingId: z.string().uuid(),
+  fromFloor: z.number().int().min(-10).max(200).nullable().optional(),
+  toFloor: z.number().int().min(-10).max(200).nullable().optional(),
+  unitsPerFloor: z.number().int().min(1).max(50),
+  codePattern: z.string().trim().min(1).max(60),
+  unitDigits: z.number().int().min(1).max(4).optional(),
+});
+export type BulkCreateRequest = z.infer<typeof bulkCreateRequestSchema>;
 
 // ── Devices ─────────────────────────────────────────────────────────────────────────────────
 

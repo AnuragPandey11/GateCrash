@@ -56,9 +56,13 @@ curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"loginId":"superadmin","password":"Township#2026"}'
 ```
 
-Also created: the **`DEFAULT`** township, block **Block A**, flats **A-101 … A-104**, gate **Main
-Gate**. A resident cannot be provisioned without a flat and a guard cannot log a visit without a gate,
-so seeding the accounts alone would not actually be usable.
+Also created: the **`DEFAULT`** township, its property levels (**Block** → **Flat**), block
+**Block A**, flats **A-101 … A-104**, gate **Main Gate**. The seed keeps the two-level shape
+deliberately — its job is a predictable fixture, not a tour of the tree, which can express
+Cluster → Villa or Tower → Floor → Flat just as well.
+
+A resident cannot be provisioned without a unit and a guard cannot log a visit without a gate, so
+seeding the accounts alone would not actually be usable.
 
 Seeded accounts have `mustResetPassword` **false** — the point of a fixture is that it is ready to
 use, and four forced password changes before any testing can start is not that. The seeder is
@@ -112,7 +116,7 @@ it.
 
 No Docker required: `PostgresTestSupport` uses Testcontainers when a Docker daemon is reachable and
 falls back to a real embedded PostgreSQL binary otherwise. Either way, every test runs against actual
-PostgreSQL with the real Flyway migration and Hibernate's `ddl-auto: validate` — never H2. 112 tests,
+PostgreSQL with the real Flyway migration and Hibernate's `ddl-auto: validate` — never H2. 189 tests,
 covering:
 
 - **RBAC negative matrix** — every role probing every endpoint it doesn't own, over the real Spring
@@ -121,12 +125,15 @@ covering:
   password reset, session revocation on password change (`AuthIntegrationTest`).
 - **Provisioning** — the `A-101-1`/`A-101-2` login-id sequence, one-time generated passwords, conflict
   handling (`UserProvisioningTest`).
-- **Visit FSM** — every legal/illegal transition, ownership checks (wrong flat, wrong sales agent),
+- **Visit FSM** — every legal/illegal transition, ownership checks (wrong unit, wrong sales agent),
   CLIENT→SALES routing, hostile photo URLs (`VisitFsmTest`, `VisitStatusTest`).
 - **Passes** — PIN/QR redemption, hash-only storage, rate limiting, expiry, revocation
   (`PassRedemptionTest`).
 - **Notifications** — every audience mode resolves the exact expected set, preview matches send,
   inbox scoping (`AudienceResolverTest`).
+- **Property tree** — a villa community and a high-rise built side by side in one database; level-shape
+  validation; unit-code uniqueness; bulk floor/unit generation; and the occupancy invariant, including
+  that a four-person household with one login counts as four residents (`PropertyTreeTest`).
 - **Scheduled jobs** — expiry sweeps are idempotent and leave live state untouched
   (`ExpirySweepJobTest`).
 - **End-to-end WebSocket** — a real STOMP client proves `VISIT_REQUESTED`/`VISIT_DECIDED` frames
@@ -189,6 +196,12 @@ See inline docs on `SecurityConfig`, `VisitService`, `PassService`, `StompAuthCh
 
 ## Known limitations / next steps
 
+- **A node cannot be re-parented.** Moving a tower between phases would strand the stored `path` of
+  every descendant, so the trigger refuses it outright rather than shipping a recursive path rewrite
+  whose failure mode is a silently mis-scoped notification audience. Delete and recreate for now.
+- **Levels cannot be reshaped once the tree is populated** (`409 PROPERTY_TREE_NOT_EMPTY`). Inserting
+  a Floor level under towers that already hold flats has no safe automatic answer to which floor each
+  flat belongs on. Renaming a level stays available at any time.
 - **Single-node WebSocket broker.** `enableSimpleBroker` doesn't share subscriptions across instances.
   Scaling horizontally needs a STOMP relay (RabbitMQ/ActiveMQ) or a Redis pub/sub bridge — noted in
   `WebSocketConfig`.

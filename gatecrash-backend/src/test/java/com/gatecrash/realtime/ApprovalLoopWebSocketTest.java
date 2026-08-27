@@ -1,12 +1,12 @@
 package com.gatecrash.realtime;
 
+import com.gatecrash.property.PropertyNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gatecrash.security.AppUserDetails;
 import com.gatecrash.security.JwtService;
 import com.gatecrash.support.PostgresTestSupport;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.visit.VisitService;
@@ -79,7 +79,7 @@ class ApprovalLoopWebSocketTest {
 
     private WebSocketStompClient stompClient;
     private Gate gate;
-    private Flat flat;
+    private PropertyNode flat;
     private AppUser guard;
     private AppUser resident;
 

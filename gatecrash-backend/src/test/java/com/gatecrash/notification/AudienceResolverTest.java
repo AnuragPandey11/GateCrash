@@ -1,12 +1,11 @@
 package com.gatecrash.notification;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.notification.dto.NotificationDtos.AudienceRule;
 import com.gatecrash.notification.dto.NotificationDtos.AudienceRule.Mode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.BuildingBlock;
-import com.gatecrash.township.Flat;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.user.AppUserRepository;
 import com.gatecrash.user.UserRole;
@@ -48,10 +47,10 @@ class AudienceResolverTest extends AbstractIntegrationTest {
     private AppUser residentA1;
     private AppUser residentA2;
     private AppUser residentB1;
-    private Flat flatA1;
-    private Flat flatB1;
-    private BuildingBlock blockA;
-    private BuildingBlock blockB;
+    private PropertyNode flatA1;
+    private PropertyNode flatB1;
+    private PropertyNode blockA;
+    private PropertyNode blockB;
 
     @BeforeEach
     void seed() {
@@ -59,7 +58,7 @@ class AudienceResolverTest extends AbstractIntegrationTest {
         blockA = data.block("Block A");
         blockB = data.block("Block B");
         flatA1 = data.flat(blockA, "A-101");
-        Flat flatA2 = data.flat(blockA, "A-102");
+        PropertyNode flatA2 = data.flat(blockA, "A-102");
         flatB1 = data.flat(blockB, "B-201");
 
         admin = data.admin();

@@ -1,7 +1,7 @@
 package com.gatecrash.visit;
 
 import com.gatecrash.pass.PreApproval;
-import com.gatecrash.township.Flat;
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.Township;
 import com.gatecrash.user.AppUser;
@@ -47,7 +47,7 @@ public class VisitorLog {
     /**
      * The tenant. Redundant with {@code gate.township} in the happy path -- and that is the point:
      * the composite foreign keys {@code visit_gate_same_township}, {@code visit_guard_same_township},
-     * {@code visit_approver_same_township}, {@code visit_flat_same_township} and
+     * {@code visit_approver_same_township}, {@code visit_unit_same_township} and
      * {@code visit_pass_same_township} all pin their target to this column, so a visit that mixed two
      * townships could not be written at all.
      */
@@ -83,7 +83,7 @@ public class VisitorLog {
 
     /**
      * The routed decision-maker. For resident routing this is one nominated account on the flat --
-     * any active resident of {@link #targetFlat} may decide, so ownership is checked against the flat,
+     * any active resident of {@link #targetUnit} may decide, so ownership is checked against the flat,
      * not against this id.
      */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -97,7 +97,7 @@ public class VisitorLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "target_flat_id")
-    private Flat targetFlat;
+    private PropertyNode targetUnit;
 
     /** Set when this arose from a pass redemption. */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -144,6 +144,6 @@ public class VisitorLog {
     }
 
     public UUID getTargetFlatId() {
-        return targetFlat == null ? null : targetFlat.getId();
+        return targetUnit == null ? null : targetUnit.getId();
     }
 }

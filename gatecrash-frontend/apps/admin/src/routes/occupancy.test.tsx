@@ -185,3 +185,27 @@ describe('visitor cards', () => {
     expect(within(card).getByText(/^Inside for /)).toBeInTheDocument();
   });
 });
+
+/**
+ * The three numbers that used to share the word "occupancy" have to stay visibly distinct on
+ * screen, not just in the API. A developer reading their sales occupancy off the lobby count is
+ * the exact failure this separation exists to prevent.
+ */
+describe('Property occupancy summary', () => {
+  it('shows unit occupancy, resident headcount and visitors as separate figures', async () => {
+    renderWithProviders(<OccupancyRoute />);
+
+    // 1 of 2 units occupied — the developer's metric, not the gate count.
+    await waitFor(() => {
+      expect(screen.getByText('50%')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/1 of 2 occupied/i)).toBeInTheDocument();
+
+    // Four people live here; one of them has a login. Both numbers are shown, because the gap
+    // is how many residents cannot yet be notified of anything.
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText(/1 with a login/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 cannot be notified yet/i)).toBeInTheDocument();
+  });
+});
+

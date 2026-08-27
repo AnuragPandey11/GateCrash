@@ -131,6 +131,75 @@ Feature packages under `com.gatecrash.*` each own their entity, repository, serv
 When adding a new privileged endpoint, all three layers are expected, not optional — see
 `RbacNegativeTest` for the pattern of proving layer 1, and `VisitFsmTest`/`VisitStatusTest` for layer 2.
 
+### The property tree: every developer's project is a different shape
+
+A township's hierarchy is **per-tenant configurable**, not a fixed block-then-flat pair. Two tables:
+
+- **`property_level`** — the *shape* of one township's tree: an ordered, contiguous list of levels,
+  each carrying a structural `kind` (`GROUP` | `BUILDING` | `FLOOR` | `UNIT`) and the developer's own
+  word for it (`singular`/`plural`). A villa community defines Cluster → Villa; a high-rise defines
+  Tower → Floor → Flat; a plotted layout defines Sector → Plot. **The admin console renders one tab
+  per level from these labels**, which is what makes the panel adapt per developer.
+- **`property_node`** — the tree itself, every node at every level in one self-referencing table.
+
+`township.property_type` only *seeds* the level set at creation; every label is editable afterwards.
+Fifteen types across three categories — residential (apartment, villa, row house, plotted, integrated
+township, co-living/PG, student housing, senior living, serviced apartments, farmhouse plots),
+commercial (office, IT park, mall/retail, industrial) and mixed-use — because "a township with blocks
+of flats" is one shape among many. A mall addresses `Mall → Level → Shop`; a PG addresses
+`Building → Floor → Room`.
+
+**The shape is chosen at onboarding**, on `POST /super/townships`: `propertyType` picks a preset, and
+an optional `levels` array describes a structure no preset covers (validated by the same rules as
+`PUT /admin/property/levels`). `GET /super/property-types` is the catalogue and is deliberately
+**tenantless** — a super admin onboarding a new developer has no township to name yet, so the
+tenant-scoped `/admin/property/types` would 422 on the first screen. Onboarding is the only cheap
+moment to get this right, because the level set cannot be reshaped once the tree holds anything.
+
+**The rule that keeps this honest: nomenclature is display-only.** Nothing in the code branches on a
+label — every decision is made on `PropertyNodeKind`. Otherwise renaming "Flat" to "Villa" in the
+console would change which rows a query matches. Likewise the DB keeps its names: tables are
+`property_node`, and `app_user.flat_id` / `visitor_log.target_flat_id` **kept their column names** in
+V4 while their foreign key moved to `property_node` — renaming them is a later migration, once the
+frontend stops sending `flatId`.
+
+Three fields are derived by database trigger and mapped `insertable = false, updatable = false`:
+`depth` (`parent.depth + 1`), `path` (materialized `/root/child/self/`, which turns "everyone under
+Tower A" into a prefix scan), and `is_unit`. `is_unit` exists solely to be a foreign-key target: the
+composite `(id, township_id, is_unit)` key is what stops a resident being filed under a floor or a
+whole tower. The trigger also refuses a child of a `UNIT` (a unit is a leaf) and refuses re-parenting
+(it would strand every descendant's stored path). `depth = parent.depth + 1` is what makes a cycle
+unrepresentable.
+
+Unit codes are unique **per township**, stricter than the per-block rule they replaced — resident
+login ids derive from them (`A-101` → `A-101-1`), so two blocks that each held a "101" both minted
+`101-1`. V4 de-duplicates any such collision on the way in.
+
+`PropertyTreeTest` is the matrix that proves the shapes; `TenancyConstraintsTest` proves the DB
+backstops through raw JDBC.
+
+**The admin console renders its structure tabs from `GET /admin/property/profile`** — one tab per
+level, labelled with that level's `plural`. `apps/admin/src/features/property/use-nomenclature.ts`
+is the single place labels come from; `township.test.tsx` renders the same component against a villa
+and a high-rise level set and asserts it speaks both vocabularies. The i18n bundle holds templates
+(`'Add {{level}}'`), never level names. Nullable fields in the property DTOs are typed `?:` on the
+client because the API runs `default-property-inclusion: non_null`, so a null is omitted rather than
+sent.
+
+### Occupancy means three different things — keep them apart
+
+- **Unit occupancy** (`occupancyRate`) — occupied units ÷ total units. **The developer's metric.**
+- **Resident headcount** — `SUM(property_node.declared_occupancy)`: people, *including the family
+  members who have no app account*. Counting `app_user` rows reports a four-person household as one,
+  because typically only the owner has a login. `registeredResidentAccounts` is reported alongside,
+  never instead — the gap is how many residents cannot yet be notified of anything.
+- **Visitors inside** — `visitor_log` where `status = CHECKED_IN`. The live gate roll.
+
+`GET /admin/property/occupancy` returns all three. `GET /admin/inside` is unchanged and still the
+guard's screen. **Consistency rule:** `declared_occupancy` may never sit below a unit's active
+resident account count — provisioning raises it automatically, and lowering it below is a
+`409 OCCUPANCY_BELOW_RESIDENTS`. The invariant spans two tables, so it lives in the service layer.
+
 ### Two load-bearing entities
 
 - **`visitor_log`** (`VisitorLog`) — one row per physical arrival at the gate, walk-in or pass redemption.
@@ -185,7 +254,7 @@ always the single source of truth** both reconcile against — clients also have
 ### Notification targeting engine
 
 `AudienceResolver` compiles an `audienceRule` JSONB (`ALL`, `ALL_EXCEPT`, `ROLES`, `FLATS`, `BLOCKS`) into
-one parameterized SQL query against `app_user` (+ `flat`/`building_block` joins), anchored on the
+one parameterized SQL query against `app_user` (+ `property_node` joins), anchored on the
 current township in **every** mode including `ALL` — the difference between "everyone here" and
 "everyone on the platform". The resolved set is
 materialized into `notification_recipient` for audit and read tracking, then device tokens are batched to
@@ -204,7 +273,10 @@ persisted.
 - Every schema change is a new `V<n>__description.sql` Flyway migration — never edit an applied one.
   `ddl-auto: validate`, never auto-DDL. Current migrations: `V1__init.sql` (single-tenant baseline),
   `V2__super_admin_role.sql` (the enum label alone — PostgreSQL cannot *use* a new enum value in the
-  transaction that adds it, and Flyway runs one transaction per migration), `V3__multi_tenancy.sql`.
+  transaction that adds it, and Flyway runs one transaction per migration), `V3__multi_tenancy.sql`,
+  `V4__property_tree.sql`, `V5__property_types.sql` (nine more `property_type` labels — labels only,
+  split out for V2's reason). Note V4 *creates* enum types rather than adding labels to an existing one,
+  and a freshly created type **is** usable in the same transaction — so it needed no split.
 - Postgres `ENUM` columns map with `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` + `@Enumerated(EnumType.STRING)`;
   `JSONB` columns map with `@JdbcTypeCode(SqlTypes.JSON)`.
 - Never expose `passwordHash`, generated passwords (beyond the one-time create response), PIN plaintext,

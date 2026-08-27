@@ -40,6 +40,15 @@ public final class AuditAction {
     public static final String GATE_DELETED = "GATE_DELETED";
     public static final String DUTY_CHANGED = "DUTY_CHANGED";
 
+    // property tree
+    public static final String PROPERTY_NODE_CREATED = "PROPERTY_NODE_CREATED";
+    public static final String PROPERTY_NODE_UPDATED = "PROPERTY_NODE_UPDATED";
+    public static final String PROPERTY_NODE_DELETED = "PROPERTY_NODE_DELETED";
+    public static final String PROPERTY_LEVELS_DEFINED = "PROPERTY_LEVELS_DEFINED";
+    public static final String PROPERTY_TYPE_CHANGED = "PROPERTY_TYPE_CHANGED";
+    /** Declared headcount is a claim about who lives somewhere; every change is on the record. */
+    public static final String OCCUPANCY_CHANGED = "OCCUPANCY_CHANGED";
+
     // devices
     public static final String DEVICE_REGISTERED = "DEVICE_REGISTERED";
     public static final String DEVICE_REMOVED = "DEVICE_REMOVED";

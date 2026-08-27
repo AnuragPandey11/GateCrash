@@ -1,5 +1,6 @@
 package com.gatecrash.township;
 
+import com.gatecrash.property.PropertyType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -50,6 +51,16 @@ public class Township {
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false, columnDefinition = "township_status")
     private TownshipStatus status = TownshipStatus.ACTIVE;
+
+    /**
+     * The kind of real-estate project this is. Seeds the property level set at creation and
+     * gives the console sensible presets afterwards; nothing branches on it structurally --
+     * see {@link com.gatecrash.property.PropertyType}.
+     */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "property_type", nullable = false, columnDefinition = "property_type")
+    private PropertyType propertyType = PropertyType.APARTMENT;
 
     @Column(name = "contact_email")
     private String contactEmail;

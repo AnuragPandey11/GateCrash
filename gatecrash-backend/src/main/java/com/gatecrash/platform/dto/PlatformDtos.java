@@ -2,6 +2,7 @@ package com.gatecrash.platform.dto;
 
 import com.gatecrash.township.TownshipStatus;
 import com.gatecrash.user.dto.UserDtos.CreatedUserResponse;
+import com.gatecrash.property.dto.PropertyDtos;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -48,6 +50,24 @@ public final class PlatformDtos {
             @Pattern(regexp = com.gatecrash.user.dto.UserDtos.PHONE_PATTERN,
                     message = "must be 7-15 digits, optionally prefixed with +")
             String contactPhone,
+            /**
+             * The kind of project this developer builds. Seeds the township's property levels, so
+             * its admin lands on a structure screen that already says Towers and Flats, or Clusters
+             * and Villas, rather than an empty one. Defaults to APARTMENT when omitted.
+             */
+            com.gatecrash.property.PropertyType propertyType,
+            /**
+             * An explicit level set, for a developer whose structure does not match any preset --
+             * overrides {@code propertyType}'s levels when present, while the type is still recorded
+             * for reporting.
+             *
+             * <p>This is the one moment the structure is easy to get right. The level set cannot be
+             * reshaped once the tree holds anything ({@code 409 PROPERTY_TREE_NOT_EMPTY}), because
+             * inserting a level under towers that already hold flats has no safe automatic answer to
+             * which floor each flat belongs on. Offering it at onboarding is what stops a developer
+             * discovering three levels too late that they needed a Phase.
+             */
+            @Valid @Size(max = 6) List<PropertyDtos.LevelSpec> levels,
             @Valid @NotNull TownshipAdminRequest admin) {
     }
 
@@ -82,7 +102,11 @@ public final class PlatformDtos {
             String contactPhone,
             long activeUserCount,
             long activeAdminCount,
+            /** Nodes at the outermost property level -- towers, clusters, phases. */
             long blockCount,
+            /** Nodes at the addressable level: the units a resident can live in. */
+            long unitCount,
+            com.gatecrash.property.PropertyType propertyType,
             long gateCount,
             OffsetDateTime createdAt,
             OffsetDateTime archivedAt) {

@@ -224,8 +224,8 @@ public class AuthService {
                 user.isMustResetPassword(),
                 user.isOnDuty(),
                 user.getFlatId(),
-                user.getFlat() == null ? null : user.getFlat().getNumber(),
-                user.getFlat() == null ? null : user.getFlat().getBlock().getName(),
+                user.getUnit() == null ? null : user.getUnit().getCode(),
+                user.getUnit() == null ? null : user.getUnit().containerName(),
                 township == null ? null : township.getId(),
                 township == null ? null : township.getCode(),
                 township == null ? null : township.getName());

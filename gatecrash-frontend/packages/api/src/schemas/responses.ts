@@ -1,6 +1,10 @@
 import type {
   ApproverKind,
-  BlockId,
+  PropertyCategory,
+  PropertyLevelId,
+  PropertyNodeId,
+  PropertyNodeKind,
+  PropertyType,
   DeviceId,
   DevicePlatform,
   FlatId,
@@ -325,19 +329,103 @@ export interface PostResponse {
   publishedAt: string;
 }
 
-export interface BlockResponse {
-  id: BlockId;
+/**
+ * One level of a township's hierarchy, with the developer's own word for it.
+ *
+ * The admin console renders one structure tab per level from these, which is what makes the panel
+ * adapt per developer: a villa community returns Cluster/Villa, a high-rise returns
+ * Tower/Floor/Flat, and no component knows the difference.
+ */
+export interface PropertyLevelResponse {
+  id: PropertyLevelId;
+  depth: number;
+  /** Branch on this, never on the labels. */
+  kind: PropertyNodeKind;
+  singular: string;
+  plural: string;
+  nodeCount: number;
+}
+
+export interface PropertyProfileResponse {
+  propertyType: PropertyType;
+  propertyTypeLabel: string;
+  hasFloors: boolean;
+  /** Ordered shallowest-first; exactly one has `kind === 'UNIT'`, and it is last. */
+  levels: PropertyLevelResponse[];
+}
+
+/**
+ * Note the optional markers on every nullable field. The API is configured
+ * `default-property-inclusion: non_null`, so a null is *omitted from the payload* rather than sent
+ * as `null` — a root node has no `parentId` key at all. Declaring these as `X | null` alone would
+ * be a type that never matches the wire; `?:` is what the runtime actually hands back.
+ */
+export interface PropertyNodeResponse {
+  id: PropertyNodeId;
+  parentId?: PropertyNodeId | null;
+  depth: number;
+  kind: PropertyNodeKind;
   name: string;
-  flatCount: number;
+  /** Units only. What a guard types; resident login IDs derive from it. */
+  code?: string | null;
+  /** Floors only. Signed — basements are real. */
+  levelNumber?: number | null;
+  /**
+   * The building or grouping this node sits in — "Tower A", "Rose Cluster". Floors are walked
+   * past, so a flat on storey 14 of Tower A reports "Tower A" rather than "14". Null for a root.
+   *
+   * Served by the API rather than derived here, so the screens that group units by building
+   * (provisioning, audience builder, visit filter) all agree.
+   */
+  containerName?: string | null;
+  /** Units only: people living here, including those with no app account. */
+  declaredOccupancy: number;
+  /** Units only: accounts that can actually sign in. Always ≤ declaredOccupancy. */
+  residentAccounts: number;
+  childCount: number;
   createdAt: string;
 }
 
-export interface FlatResponse {
-  id: FlatId;
-  number: string;
-  blockId: BlockId;
-  blockName: string;
-  createdAt: string;
+export interface BulkCreateResponse {
+  floorsCreated: number;
+  unitsCreated: number;
+  codes: string[];
+}
+
+/**
+ * One entry in the project-type catalogue the super admin picks from at onboarding.
+ *
+ * `defaultLevels` comes with it so the console can show the structure a choice would produce
+ * *before* the township exists — which matters because the level set is the one thing that cannot
+ * be reshaped once the tree holds anything.
+ */
+export interface PropertyTypeOption {
+  value: PropertyType;
+  label: string;
+  category: PropertyCategory;
+  categoryLabel: string;
+  description: string;
+  hasFloors: boolean;
+  defaultLevels: { kind: PropertyNodeKind; singular: string; plural: string }[];
+}
+
+/**
+ * The three questions that used to share the word "occupancy".
+ *
+ * `visitorsInside` is the number `/admin/inside` has always returned. The others did not exist
+ * before V4 — and the first of them is the one a developer means when they ask about occupancy.
+ */
+export interface OccupancySummaryResponse {
+  totalUnits: number;
+  occupiedUnits: number;
+  vacantUnits: number;
+  /** 0–1. Occupied units over total units. */
+  occupancyRate: number;
+  /** People, from each unit's declared occupancy. */
+  residentHeadcount: number;
+  /** Accounts that can sign in. The gap to headcount is who cannot be notified yet. */
+  registeredResidentAccounts: number;
+  visitorsInside: number;
 }
 
 export interface GateResponse {

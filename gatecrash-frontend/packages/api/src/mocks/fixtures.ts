@@ -1,6 +1,8 @@
 import type {
-  BlockResponse,
-  FlatResponse,
+  OccupancySummaryResponse,
+  PropertyNodeResponse,
+  PropertyTypeOption,
+  PropertyProfileResponse,
   GateResponse,
   NotificationResponse,
   PostResponse,
@@ -25,6 +27,8 @@ export const IDS = {
   gateMain: '55555555-5555-4555-8555-555555555555',
   gateService: '5555aaaa-5555-4555-8555-555555555555',
   blockA: '66666666-6666-4666-8666-666666666666',
+  levelBlock: '6666aaaa-6666-4666-8666-666666666666',
+  levelFlat: '6666bbbb-6666-4666-8666-666666666666',
   flatA101: '77777777-7777-4777-8777-777777777777',
   flatA102: '7777aaaa-7777-4777-8777-777777777777',
   visitPending: '88888888-8888-4888-8888-888888888888',
@@ -129,26 +133,118 @@ export const gatesFixture: GateResponse[] = [
   { id: IDS.gateService, name: 'Service Gate', createdAt: '2026-01-04T09:01:00+05:30' },
 ] as GateResponse[];
 
-export const blocksFixture: BlockResponse[] = [
-  { id: IDS.blockA, name: 'Block A', flatCount: 2, createdAt: '2026-01-04T09:00:00+05:30' },
-] as BlockResponse[];
+/**
+ * A two-level Block -> Flat project, matching what the backend seeds. The tree can express
+ * Cluster -> Villa or Tower -> Floor -> Flat just as well; the default fixture stays the simple
+ * shape so tests that do not care about structure read as they always did.
+ */
+export const propertyProfileFixture: PropertyProfileResponse = {
+  propertyType: 'APARTMENT',
+  propertyTypeLabel: 'Apartment complex',
+  hasFloors: false,
+  levels: [
+    { id: IDS.levelBlock, depth: 0, kind: 'BUILDING', singular: 'Block', plural: 'Blocks', nodeCount: 1 },
+    { id: IDS.levelFlat, depth: 1, kind: 'UNIT', singular: 'Flat', plural: 'Flats', nodeCount: 2 },
+  ],
+} as PropertyProfileResponse;
 
-export const flatsFixture: FlatResponse[] = [
+export const blocksFixture: PropertyNodeResponse[] = [
+  {
+    id: IDS.blockA,
+    parentId: null,
+    depth: 0,
+    kind: 'BUILDING',
+    name: 'Block A',
+    code: null,
+    levelNumber: null,
+    declaredOccupancy: 0,
+    residentAccounts: 0,
+    childCount: 2,
+    createdAt: '2026-01-04T09:00:00+05:30',
+  },
+] as PropertyNodeResponse[];
+
+export const flatsFixture: PropertyNodeResponse[] = [
   {
     id: IDS.flatA101,
-    number: 'A-101',
-    blockId: IDS.blockA,
-    blockName: 'Block A',
+    parentId: IDS.blockA,
+    depth: 1,
+    kind: 'UNIT',
+    name: 'A-101',
+    code: 'A-101',
+    levelNumber: null,
+    // Four people live here; one of them has a login. That gap is the whole point of the field.
+    declaredOccupancy: 4,
+    residentAccounts: 1,
+    childCount: 0,
     createdAt: '2026-01-04T09:02:00+05:30',
   },
   {
     id: IDS.flatA102,
-    number: 'A-102',
-    blockId: IDS.blockA,
-    blockName: 'Block A',
+    parentId: IDS.blockA,
+    depth: 1,
+    kind: 'UNIT',
+    name: 'A-102',
+    code: 'A-102',
+    levelNumber: null,
+    declaredOccupancy: 0,
+    residentAccounts: 0,
+    childCount: 0,
     createdAt: '2026-01-04T09:03:00+05:30',
   },
-] as FlatResponse[];
+] as PropertyNodeResponse[];
+
+/** Three of the fifteen presets — enough to prove grouping and structure preview. */
+export const propertyTypesFixture = [
+  {
+    value: 'APARTMENT',
+    label: 'Apartment complex',
+    category: 'RESIDENTIAL',
+    categoryLabel: 'Residential',
+    description: 'Towers of floors of flats. The default for most urban housing projects.',
+    hasFloors: true,
+    defaultLevels: [
+      { kind: 'BUILDING', singular: 'Tower', plural: 'Towers' },
+      { kind: 'FLOOR', singular: 'Floor', plural: 'Floors' },
+      { kind: 'UNIT', singular: 'Flat', plural: 'Flats' },
+    ],
+  },
+  {
+    value: 'VILLA',
+    label: 'Villa community',
+    category: 'RESIDENTIAL',
+    categoryLabel: 'Residential',
+    description: 'Clusters of independent villas. No floor level -- a villa is addressed whole.',
+    hasFloors: false,
+    defaultLevels: [
+      { kind: 'GROUP', singular: 'Cluster', plural: 'Clusters' },
+      { kind: 'UNIT', singular: 'Villa', plural: 'Villas' },
+    ],
+  },
+  {
+    value: 'RETAIL',
+    label: 'Mall / retail centre',
+    category: 'COMMERCIAL',
+    categoryLabel: 'Commercial',
+    description: 'Levels of shops. Visitors are routed to a tenant, not to a resident.',
+    hasFloors: true,
+    defaultLevels: [
+      { kind: 'BUILDING', singular: 'Mall', plural: 'Malls' },
+      { kind: 'FLOOR', singular: 'Level', plural: 'Levels' },
+      { kind: 'UNIT', singular: 'Shop', plural: 'Shops' },
+    ],
+  },
+] as PropertyTypeOption[];
+
+export const occupancySummaryFixture: OccupancySummaryResponse = {
+  totalUnits: 2,
+  occupiedUnits: 1,
+  vacantUnits: 1,
+  occupancyRate: 0.5,
+  residentHeadcount: 4,
+  registeredResidentAccounts: 1,
+  visitorsInside: 1,
+};
 
 export const usersFixture: UserResponse[] = [
   {

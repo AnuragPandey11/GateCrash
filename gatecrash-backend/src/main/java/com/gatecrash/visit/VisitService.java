@@ -11,7 +11,8 @@ import com.gatecrash.common.exception.NotFoundException;
 import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.AppUserDetails;
 import com.gatecrash.security.SecurityUtils;
-import com.gatecrash.township.Flat;
+import com.gatecrash.property.PropertyNode;
+import com.gatecrash.property.PropertyService;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.TownshipService;
 import com.gatecrash.user.AppUser;
@@ -63,6 +64,7 @@ public class VisitService {
     private final VisitorLogRepository visits;
     private final AppUserRepository users;
     private final TownshipService township;
+    private final PropertyService property;
     private final VisitMapper mapper;
     private final VisitNotifier notifier;
     private final AuditService audit;
@@ -140,22 +142,24 @@ public class VisitService {
         return List.of(agent.getId());
     }
 
-    /** @return the user ids to notify -- every active resident of the flat */
+    /** @return the user ids to notify -- every active resident of the unit */
     private List<UUID> routeToFlat(VisitorLog visit, CreateVisitRequest request) {
         if (request.targetFlatId() == null) {
             throw new BusinessValidationException("TARGET_FLAT_REQUIRED",
                     "targetFlatId is required for non-CLIENT visits.");
         }
-        Flat flat = township.requireFlat(request.targetFlatId());
-        List<AppUser> residents = users.findByFlat_IdAndRoleAndActiveTrue(flat.getId(), UserRole.RESIDENT);
+        // requireUnit, not requireNode: a visit is routed to the people who live somewhere, so a
+        // guard naming a whole tower is a request that cannot be satisfied, not one to route wide.
+        PropertyNode unit = property.requireUnit(request.targetFlatId());
+        List<AppUser> residents = users.findByUnit_IdAndRoleAndActiveTrue(unit.getId(), UserRole.RESIDENT);
         if (residents.isEmpty()) {
             throw new BusinessValidationException("NO_RESIDENT",
-                    "That flat has no active resident account to approve the visit.");
+                    "That unit has no active resident account to approve the visit.");
         }
 
-        visit.setTargetFlat(flat);
+        visit.setTargetUnit(unit);
         visit.setApproverKind(ApproverKind.RESIDENT);
-        // A nominated approver is persisted for reporting, but every resident of the flat is notified
+        // A nominated approver is persisted for reporting, but every resident of the unit is notified
         // and any of them may decide -- see the ownership check in decide().
         visit.setApprover(residents.get(0));
         return residents.stream().map(AppUser::getId).toList();
@@ -284,7 +288,7 @@ public class VisitService {
             // resident_needs_flat makes this unreachable through normal provisioning.
             return List.of();
         }
-        return visits.findByTargetFlat_IdAndStatusOrderByCreatedAtDesc(caller.getFlatId(), VisitStatus.PENDING);
+        return visits.findByTargetUnit_IdAndStatusOrderByCreatedAtDesc(caller.getFlatId(), VisitStatus.PENDING);
     }
 
     private VisitorLog lockVisit(UUID visitId) {

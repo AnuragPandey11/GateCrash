@@ -15,6 +15,8 @@ import com.gatecrash.user.dto.UserDtos.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import com.gatecrash.property.PropertyService;
+import com.gatecrash.property.dto.PropertyDtos.PropertyTypeOption;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -51,6 +54,24 @@ public class SuperAdminController {
 
     private final TownshipLifecycleService lifecycle;
     private final SuperAdminService superAdmins;
+    private final PropertyService property;
+
+    // ----- onboarding reference data ----------------------------------------------------------
+
+    /**
+     * The project types a township can be onboarded as, with the level set each one seeds.
+     *
+     * <p>Deliberately duplicated from {@code /admin/property/types} rather than shared: that one is
+     * tenant-scoped and a super admin onboarding a *new* developer has no township to name yet, so
+     * calling it would be a {@code 422 TOWNSHIP_CONTEXT_REQUIRED} on the first screen of the flow.
+     * Static reference data either way.
+     */
+    @GetMapping("/property-types")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Project types available when onboarding a township")
+    public List<PropertyTypeOption> propertyTypes() {
+        return property.catalogue();
+    }
 
     // ----- townships --------------------------------------------------------------------------
 

@@ -1,9 +1,11 @@
 package com.gatecrash.support;
 
-import com.gatecrash.township.BuildingBlock;
-import com.gatecrash.township.BuildingBlockRepository;
-import com.gatecrash.township.Flat;
-import com.gatecrash.township.FlatRepository;
+import com.gatecrash.property.PropertyLevel;
+import com.gatecrash.property.PropertyLevelRepository;
+import com.gatecrash.property.PropertyNode;
+import com.gatecrash.property.PropertyNodeKind;
+import com.gatecrash.property.PropertyNodeRepository;
+import com.gatecrash.property.PropertyService;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.GateRepository;
 import com.gatecrash.township.Township;
@@ -40,8 +42,8 @@ public class TestDataFactory {
     public static final String PASSWORD = "TestPassw0rd!";
 
     private final TownshipRepository townships;
-    private final BuildingBlockRepository blocks;
-    private final FlatRepository flats;
+    private final PropertyNodeRepository nodes;
+    private final PropertyLevelRepository levels;
     private final GateRepository gates;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
@@ -65,7 +67,7 @@ public class TestDataFactory {
         jdbcTemplate.execute("""
                 TRUNCATE TABLE audit_log, notification_recipient, notification, community_post,
                                visitor_log, pre_approval, device, refresh_token, app_user,
-                               flat, building_block, gate, township
+                               property_node, property_level, gate, township
                 RESTART IDENTITY CASCADE
                 """);
         primary = township("PRIMARY");
@@ -88,30 +90,98 @@ public class TestDataFactory {
         township.setCode((code + "-" + sequence.incrementAndGet()).toUpperCase(Locale.ROOT));
         township.setName(code + " Township");
         township.setStatus(TownshipStatus.ACTIVE);
-        return townships.save(township);
+        townships.saveAndFlush(township);
+        seedLevels(township);
+        return township;
     }
 
+    /**
+     * Two levels, Block -> Flat, matching what {@code V4__property_tree.sql} seeds for every
+     * township that predated the tree. A node cannot exist at a depth its township has not defined
+     * ({@code property_node_level_defined}), so this has to run before any structure is created.
+     *
+     * <p>Deliberately not {@code PropertyType.APARTMENT}'s preset, which is three levels deep --
+     * that would put units at depth 2 and every existing test parents its flats straight onto a
+     * block. Tests that want floors build the third level themselves.
+     */
+    private void seedLevels(Township township) {
+        levels.saveAndFlush(level(township, 0, PropertyNodeKind.BUILDING, "Block", "Blocks"));
+        levels.saveAndFlush(level(township, 1, PropertyNodeKind.UNIT, "Flat", "Flats"));
+    }
+
+    private PropertyLevel level(Township township, int depth, PropertyNodeKind kind,
+                                String singular, String plural) {
+        PropertyLevel level = new PropertyLevel();
+        level.setTownship(township);
+        level.setDepth(depth);
+        level.setKind(kind);
+        level.setSingular(singular);
+        level.setPlural(plural);
+        return level;
+    }
+
+    /**
+     * Re-seeds a township as a three-level Tower -> Floor -> PropertyNode project, for the tests that prove
+     * the tree is not just the old two-level shape wearing a new table.
+     */
     @Transactional
-    public BuildingBlock block(String name) {
+    public void useFloorLevels(Township township) {
+        levels.deleteAll(levels.findByTownship_IdOrderByDepthAsc(township.getId()));
+        levels.flush();
+        levels.saveAndFlush(level(township, 0, PropertyNodeKind.BUILDING, "Tower", "Towers"));
+        levels.saveAndFlush(level(township, 1, PropertyNodeKind.FLOOR, "Floor", "Floors"));
+        levels.saveAndFlush(level(township, 2, PropertyNodeKind.UNIT, "Apartment", "Apartments"));
+    }
+
+    /**
+     * A depth-0 node. Still called {@code block} because that is what every existing test calls it,
+     * and the seeded level set is still Block -> Flat -- the tree can express far more, but the
+     * default fixture deliberately stays the shape the tests were written against.
+     */
+    @Transactional
+    public PropertyNode block(String name) {
         return block(primaryTownship(), name);
     }
 
     @Transactional
-    public BuildingBlock block(Township township, String name) {
-        BuildingBlock block = new BuildingBlock();
+    public PropertyNode block(Township township, String name) {
+        PropertyNode block = new PropertyNode();
         block.setTownship(township);
+        block.setKind(PropertyNodeKind.BUILDING);
         block.setName(name + "-" + sequence.incrementAndGet());
-        return blocks.save(block);
+        return nodes.saveAndFlush(block);
     }
 
-    /** The flat inherits its block's township, exactly as {@code TownshipService} does. */
+    /**
+     * The unit inherits its parent's township, exactly as {@code PropertyService} does.
+     *
+     * <p>The number is used verbatim, with no sequence suffix -- unlike blocks and gates. Resident
+     * login ids are derived from it ({@code A-101} -> {@code A-101-1}), so a factory that quietly
+     * appended a counter would make every assertion about a login id unwritable. Unit codes are
+     * unique per township rather than globally, so two townships can both hold an {@code A-101};
+     * two in the same township is a genuine collision and the test wanting one should say so.
+     */
     @Transactional
-    public Flat flat(BuildingBlock block, String number) {
-        Flat flat = new Flat();
+    public PropertyNode flat(PropertyNode block, String number) {
+        PropertyNode flat = new PropertyNode();
         flat.setTownship(block.getTownship());
-        flat.setBlock(block);
-        flat.setNumber(number);
-        return flats.save(flat);
+        flat.setParent(block);
+        flat.setKind(PropertyNodeKind.UNIT);
+        flat.setName(number);
+        flat.setCode(number);
+        return nodes.saveAndFlush(flat);
+    }
+
+    /** A storey, for the tests that exercise a three-level Tower -> Floor -> Unit township. */
+    @Transactional
+    public PropertyNode floor(PropertyNode building, int storey) {
+        PropertyNode floor = new PropertyNode();
+        floor.setTownship(building.getTownship());
+        floor.setParent(building);
+        floor.setKind(PropertyNodeKind.FLOOR);
+        floor.setName(storey == 0 ? "Ground" : String.valueOf(storey));
+        floor.setLevelNumber(storey);
+        return nodes.saveAndFlush(floor);
     }
 
     @Transactional
@@ -128,12 +198,12 @@ public class TestDataFactory {
     }
 
     @Transactional
-    public AppUser user(UserRole role, String loginId, Flat flat) {
+    public AppUser user(UserRole role, String loginId, PropertyNode flat) {
         return user(primaryTownship(), role, loginId, flat);
     }
 
     @Transactional
-    public AppUser user(Township township, UserRole role, String loginId, Flat flat) {
+    public AppUser user(Township township, UserRole role, String loginId, PropertyNode flat) {
         AppUser user = new AppUser();
         user.setTownship(township);
         user.setRole(role);
@@ -142,7 +212,7 @@ public class TestDataFactory {
         user.setPasswordHash(passwordEncoder.encode(PASSWORD));
         user.setMustResetPassword(false);
         user.setActive(true);
-        user.setFlat(flat);
+        user.setUnit(flat);
         return users.save(user);
     }
 
@@ -185,8 +255,8 @@ public class TestDataFactory {
     }
 
     @Transactional
-    public AppUser resident(Flat flat) {
-        return user(flat.getTownship(), UserRole.RESIDENT, flat.getNumber(), flat);
+    public AppUser resident(PropertyNode flat) {
+        return user(flat.getTownship(), UserRole.RESIDENT, flat.getCode(), flat);
     }
 
     @Transactional

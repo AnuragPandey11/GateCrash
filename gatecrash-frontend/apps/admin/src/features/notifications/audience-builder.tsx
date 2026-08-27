@@ -1,4 +1,4 @@
-import { useBlocks, useFlats } from '@gatecrash/api';
+import { usePropertyNodes } from '@gatecrash/api';
 import {
   AUDIENCE_LIMITS,
   AUDIENCE_MODES,
@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
+import { useNomenclature } from '@/features/property/use-nomenclature';
 
 /**
  * The audience builder — FRONTEND.md §8.5.2.
@@ -44,8 +45,15 @@ export function AudienceBuilder({
   onFlatSearchChange,
 }: AudienceBuilderProps) {
   const { t } = useTranslation();
-  const blocks = useBlocks();
-  const flats = useFlats();
+  const nom = useNomenclature();
+  // BLOCKS outgrew its name server-side: it now means "everyone anywhere beneath these nodes", at
+  // any depth. Offering the outermost level keeps the picker meaningful for every project shape --
+  // towers in a high-rise, clusters in a villa community, phases in a mixed-use township.
+  const blocks = usePropertyNodes({ depth: 0 });
+  const flats = usePropertyNodes(
+    { depth: nom.unitLevel?.depth ?? null },
+    { enabled: nom.unitLevel != null },
+  );
 
   const selectedRoles = new Set(rule.roles ?? []);
   const selectedFlats = new Set(rule.flatIds ?? []);
@@ -53,12 +61,14 @@ export function AudienceBuilder({
 
   const flatsByBlock = useMemo(() => {
     const needle = flatSearch.trim().toLowerCase();
-    const groups = new Map<BlockId, { name: string; flats: { id: FlatId; number: string }[] }>();
+    const groups = new Map<string, { name: string; flats: { id: FlatId; number: string }[] }>();
     for (const flat of flats.data ?? []) {
-      if (needle && !flat.number.toLowerCase().includes(needle)) continue;
-      const group = groups.get(flat.blockId) ?? { name: flat.blockName, flats: [] };
-      group.flats.push({ id: flat.id, number: flat.number });
-      groups.set(flat.blockId, group);
+      const label = flat.code ?? flat.name;
+      if (needle && !label.toLowerCase().includes(needle)) continue;
+      const key = flat.containerName ?? '';
+      const group = groups.get(key) ?? { name: key, flats: [] };
+      group.flats.push({ id: flat.id, number: label });
+      groups.set(key, group);
     }
     return groups;
   }, [flats.data, flatSearch]);
@@ -158,7 +168,11 @@ export function AudienceBuilder({
               />
               {block.name}
               <span className="text-xs text-text-muted">
-                {t('township.blocks.flatCount', { count: block.flatCount })}
+                {t('township.node.childCount', {
+                  count: block.childCount,
+                  level: nom.singular(1),
+                  levels: nom.plural(1),
+                })}
               </span>
             </label>
           ))}

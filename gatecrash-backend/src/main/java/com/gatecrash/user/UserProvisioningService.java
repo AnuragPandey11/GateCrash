@@ -8,8 +8,9 @@ import com.gatecrash.common.exception.ForbiddenException;
 import com.gatecrash.common.exception.NotFoundException;
 import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.SecurityUtils;
-import com.gatecrash.township.Flat;
-import com.gatecrash.township.FlatRepository;
+import com.gatecrash.property.PropertyNode;
+import com.gatecrash.property.PropertyNodeRepository;
+import com.gatecrash.property.PropertyService;
 import com.gatecrash.township.TownshipRepository;
 import com.gatecrash.user.dto.UserDtos.CreateUserRequest;
 import com.gatecrash.user.dto.UserDtos.CreatedUserResponse;
@@ -50,7 +51,8 @@ public class UserProvisioningService {
     private static final Logger log = LoggerFactory.getLogger(UserProvisioningService.class);
 
     private final AppUserRepository users;
-    private final FlatRepository flats;
+    private final PropertyNodeRepository nodes;
+    private final PropertyService property;
     private final TownshipRepository townships;
     private final PasswordEncoder passwordEncoder;
     private final PasswordGenerator passwordGenerator;
@@ -145,25 +147,40 @@ public class UserProvisioningService {
     }
 
     /**
-     * Residents get {@code <flat number>-<n>}: {@code A-101-1}, then {@code A-101-2}. That is unique
+     * Residents get {@code <unit code>-<n>}: {@code A-101-1}, then {@code A-101-2}. That is unique
      * within the township only -- every township with a block A mints its own {@code A-101-1}.
      *
-     * <p>The flat row is locked for update first, which serialises two admins provisioning into the
-     * same flat at the same moment. The count deliberately includes deactivated accounts -- reusing
+     * <p>The unit row is locked for update first, which serialises two admins provisioning into the
+     * same unit at the same moment. The count deliberately includes deactivated accounts -- reusing
      * {@code A-101-2} after its owner moved out would silently re-point that login id at a new person
      * and make the audit trail ambiguous.
+     *
+     * <p>The target must be a node at the addressable level. The database refuses a resident filed
+     * under a floor or a tower outright, but resolving it here turns that into a 400 that names the
+     * problem instead of a foreign key violation surfacing as a 500.
+     *
+     * <p>Provisioning also raises the unit's declared occupancy to at least the number of accounts
+     * on it. Without that, adding a fourth resident to a unit declared as holding two left the
+     * declaration quietly wrong and nothing ever reconciled it -- occupancy reporting would then
+     * disagree with the account list for the rest of the unit's life.
      */
     private void applyResidentIdentity(AppUser user, CreateUserRequest request, UUID townshipId) {
         if (request.flatId() == null) {
             throw new BusinessValidationException("FLAT_REQUIRED",
                     "flatId is required when provisioning a RESIDENT.");
         }
-        Flat flat = flats.findByIdForUpdate(request.flatId(), townshipId)
-                .orElseThrow(() -> NotFoundException.of("Flat", request.flatId()));
+        PropertyNode unit = nodes.findByIdForUpdate(request.flatId(), townshipId)
+                .orElseThrow(() -> NotFoundException.of("Unit", request.flatId()));
+        if (!unit.getKind().isUnit()) {
+            throw new BusinessValidationException("NOT_A_UNIT",
+                    "\"" + unit.getName() + "\" is not a unit -- residents attach to the addressable "
+                            + "level only.");
+        }
 
-        long existing = users.countByFlat_Id(flat.getId());
-        user.setFlat(flat);
-        user.setLoginId(flat.getNumber() + "-" + (existing + 1));
+        long existing = users.countByUnit_Id(unit.getId());
+        user.setUnit(unit);
+        user.setLoginId(unit.getCode() + "-" + (existing + 1));
+        property.raiseDeclaredOccupancy(unit, existing + 1);
     }
 
     private void applyStaffIdentity(AppUser user, CreateUserRequest request, UUID townshipId) {

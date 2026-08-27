@@ -1,4 +1,4 @@
-import type { TownshipId, UserId } from '@gatecrash/core';
+import type { PropertyNodeKind, PropertyType, TownshipId, UserId } from '@gatecrash/core';
 import type { ApiClient } from '../client';
 import type { PageArgs, PageResponse } from '../pagination';
 import { toPageParams } from '../pagination';
@@ -6,6 +6,7 @@ import type {
   CreatedTownshipResponse,
   CreatedUserResponse,
   ResetPasswordResponse,
+  PropertyTypeOption,
   SuperAdminResponse,
   TownshipResponse,
   UserResponse,
@@ -28,6 +29,13 @@ export interface CreateTownshipBody {
   name: string;
   contactEmail?: string;
   contactPhone?: string;
+  /** The kind of project this developer builds. Seeds the township's levels. */
+  propertyType?: PropertyType;
+  /**
+   * An explicit level set, for a developer whose structure matches no preset. Overrides
+   * `propertyType`'s levels; the type is still recorded for reporting.
+   */
+  levels?: { kind: PropertyNodeKind; singular: string; plural: string }[];
   admin: TownshipAdminBody;
 }
 
@@ -49,6 +57,17 @@ export function platformEndpoints(client: ApiClient) {
     // ── townships ───────────────────────────────────────────────────────────────────────────
 
     /** Onboards a township and its first admin in one call; the admin's password comes back once. */
+    /**
+     * The project types a township can be onboarded as, with the level set each would seed.
+     *
+     * Deliberately the `/super` copy rather than `/admin/property/types`: that one is tenant-scoped,
+     * and a super admin onboarding a *new* developer has no township to name yet — calling it would
+     * be a 422 on the first screen of the flow.
+     */
+    propertyTypes(signal?: AbortSignal): Promise<PropertyTypeOption[]> {
+      return client.get<PropertyTypeOption[]>('super/property-types', signal ? { signal } : {});
+    },
+
     createTownship(body: CreateTownshipBody): Promise<CreatedTownshipResponse> {
       return client.post<CreatedTownshipResponse>('super/townships', { json: body });
     },

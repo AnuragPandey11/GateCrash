@@ -1,4 +1,4 @@
-import type { BlockId, GateId, TownshipId, UserId, VisitId } from '@gatecrash/core';
+import type { GateId, PropertyNodeId, TownshipId, UserId, VisitId } from '@gatecrash/core';
 import type { PageArgs } from '../pagination';
 import type { UserFilters, VisitFilters } from '../filters';
 
@@ -47,10 +47,17 @@ export const qk = {
     users: (filters: UserFilters, page: PageArgs) => ['admin', 'users', filters, page] as const,
     usersAll: ['admin', 'users'] as const,
     user: (id: UserId) => ['admin', 'users', 'one', id] as const,
-    blocks: ['admin', 'blocks'] as const,
-    flats: (blockId?: BlockId | null) => ['admin', 'flats', blockId ?? 'all'] as const,
-    flatsAll: ['admin', 'flats'] as const,
     gates: ['admin', 'gates'] as const,
+
+    // Property tree. `propertyAll` is the invalidation root: creating a node changes its parent's
+    // child count and the level's node count as well as the list it landed in, so writes invalidate
+    // the whole subtree of keys rather than trying to predict which lists moved.
+    propertyAll: ['admin', 'property'] as const,
+    propertyProfile: ['admin', 'property', 'profile'] as const,
+    propertyTypes: ['admin', 'property', 'types'] as const,
+    propertyNodes: (parentId?: PropertyNodeId | null, depth?: number | null) =>
+      ['admin', 'property', 'nodes', parentId ?? 'any', depth ?? 'any'] as const,
+    propertyOccupancy: ['admin', 'property', 'occupancy'] as const,
     notifications: (page: PageArgs) => ['admin', 'notifications', page] as const,
     notificationsAll: ['admin', 'notifications'] as const,
   },
@@ -65,6 +72,8 @@ export const qk = {
     townships: (page: PageArgs, includeArchived: boolean) =>
       ['platform', 'townships', page, includeArchived] as const,
     townshipsAll: ['platform', 'townships'] as const,
+    // Static reference data, readable before any township exists.
+    propertyTypes: ['platform', 'property-types'] as const,
     township: (id: TownshipId) => ['platform', 'townships', 'one', id] as const,
     townshipAdmins: (id: TownshipId) => ['platform', 'townships', id, 'admins'] as const,
     superAdmins: ['platform', 'admins'] as const,

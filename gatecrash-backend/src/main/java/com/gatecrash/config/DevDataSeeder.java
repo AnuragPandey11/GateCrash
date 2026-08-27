@@ -1,9 +1,10 @@
 package com.gatecrash.config;
 
-import com.gatecrash.township.BuildingBlock;
-import com.gatecrash.township.BuildingBlockRepository;
-import com.gatecrash.township.Flat;
-import com.gatecrash.township.FlatRepository;
+import com.gatecrash.property.PropertyNode;
+import com.gatecrash.property.PropertyNodeKind;
+import com.gatecrash.property.PropertyNodeRepository;
+import com.gatecrash.property.PropertyService;
+import com.gatecrash.property.PropertyType;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.GateRepository;
 import com.gatecrash.township.Township;
@@ -69,8 +70,8 @@ public class DevDataSeeder implements ApplicationRunner {
 
     private final AppUserRepository users;
     private final TownshipRepository townships;
-    private final BuildingBlockRepository blocks;
-    private final FlatRepository flats;
+    private final PropertyNodeRepository nodes;
+    private final PropertyService property;
     private final GateRepository gates;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
@@ -123,8 +124,9 @@ public class DevDataSeeder implements ApplicationRunner {
                         "Township '" + townshipCode + "' is missing. It is created by "
                                 + "V3__multi_tenancy.sql; the schema is not fully migrated."));
 
-        BuildingBlock block = seedBlock(township);
-        List<Flat> seededFlats = seedFlats(township, block);
+        property.seedLevelsFor(township, PropertyType.APARTMENT);
+        PropertyNode block = seedBlock(township);
+        List<PropertyNode> seededFlats = seedFlats(township, block);
         seedGate(township);
 
         List<String> created = new ArrayList<>();
@@ -137,9 +139,9 @@ public class DevDataSeeder implements ApplicationRunner {
         // The resident's login id is derived from the flat exactly as UserProvisioningService
         // derives it (A-101-1, A-101-2, ...), so a seeded resident is indistinguishable from a
         // provisioned one.
-        Flat firstFlat = seededFlats.isEmpty() ? null : seededFlats.get(0);
+        PropertyNode firstFlat = seededFlats.isEmpty() ? null : seededFlats.get(0);
         if (firstFlat != null) {
-            String residentLoginId = firstFlat.getNumber() + "-1";
+            String residentLoginId = firstFlat.getCode() + "-1";
             if (seedResident(township, residentLoginId, firstFlat, password)) {
                 created.add("RESIDENT " + residentLoginId);
             }
@@ -204,31 +206,38 @@ public class DevDataSeeder implements ApplicationRunner {
         }
     }
 
-    private BuildingBlock seedBlock(Township township) {
-        return blocks.findByTownship_IdAndNameIgnoreCase(township.getId(), BLOCK_NAME)
+    /**
+     * The seeded township keeps the two-level Block -> Flat shape it has always had, so existing
+     * local setups and every test that expects {@code A-101} still see exactly what they did. The
+     * tree can express far more than this; the seed deliberately does not, because its job is a
+     * predictable fixture rather than a tour of the feature.
+     */
+    private PropertyNode seedBlock(Township township) {
+        return nodes.findByTownship_IdAndDepthOrderByNameAsc(township.getId(), 0).stream()
+                .filter(n -> n.getName().equalsIgnoreCase(BLOCK_NAME))
+                .findFirst()
                 .orElseGet(() -> {
-                    BuildingBlock block = new BuildingBlock();
+                    PropertyNode block = new PropertyNode();
                     block.setTownship(township);
+                    block.setKind(PropertyNodeKind.BUILDING);
                     block.setName(BLOCK_NAME);
-                    return blocks.save(block);
+                    return nodes.saveAndFlush(block);
                 });
     }
 
-    private List<Flat> seedFlats(Township township, BuildingBlock block) {
-        List<Flat> result = new ArrayList<>();
+    private List<PropertyNode> seedFlats(Township township, PropertyNode block) {
+        List<PropertyNode> result = new ArrayList<>();
         for (String number : FLAT_NUMBERS) {
-            if (flats.existsByBlock_IdAndNumberIgnoreCase(block.getId(), number)) {
-                flats.findByBlock_IdOrderByNumberAsc(block.getId()).stream()
-                        .filter(flat -> flat.getNumber().equalsIgnoreCase(number))
-                        .findFirst()
-                        .ifPresent(result::add);
-                continue;
-            }
-            Flat flat = new Flat();
-            flat.setTownship(township);
-            flat.setBlock(block);
-            flat.setNumber(number);
-            result.add(flats.save(flat));
+            nodes.findByTownship_IdAndCodeIgnoreCase(township.getId(), number)
+                    .ifPresentOrElse(result::add, () -> {
+                        PropertyNode flat = new PropertyNode();
+                        flat.setTownship(township);
+                        flat.setParent(block);
+                        flat.setKind(PropertyNodeKind.UNIT);
+                        flat.setName(number);
+                        flat.setCode(number);
+                        result.add(nodes.saveAndFlush(flat));
+                    });
         }
         return result;
     }
@@ -253,13 +262,17 @@ public class DevDataSeeder implements ApplicationRunner {
         return true;
     }
 
-    private boolean seedResident(Township township, String loginId, Flat flat, String password) {
+    private boolean seedResident(Township township, String loginId, PropertyNode flat, String password) {
         if (users.existsByTownship_IdAndLoginId(township.getId(), loginId)) {
             return false;
         }
         AppUser user = newUser(township, UserRole.RESIDENT, loginId, RESIDENT.fullName(),
                 RESIDENT.phone(), password);
-        user.setFlat(flat);
+        user.setUnit(flat);
+        // Matches what UserProvisioningService does for a real resident: the declared headcount
+        // never sits below the number of accounts that can sign in for the unit.
+        flat.setDeclaredOccupancy(Math.max(flat.getDeclaredOccupancy(), 1));
+        nodes.save(flat);
         users.save(user);
         return true;
     }

@@ -14,8 +14,23 @@ type Brand<K, T> = K & { readonly __brand: T };
 
 export type TownshipId = Brand<string, 'TownshipId'>;
 export type UserId = Brand<string, 'UserId'>;
-export type FlatId = Brand<string, 'FlatId'>;
-export type BlockId = Brand<string, 'BlockId'>;
+/**
+ * Any node in the property tree — a phase, a tower, a floor or a flat. One brand for all of them,
+ * because after V4 they are literally one table and a "block id" is just a node id that happens to
+ * sit at depth 0.
+ */
+export type PropertyNodeId = Brand<string, 'PropertyNodeId'>;
+export type PropertyLevelId = Brand<string, 'PropertyLevelId'>;
+
+/**
+ * A node at the addressable level. Aliased to {@link PropertyNodeId} rather than branded
+ * separately: the API still calls this field `flatId` (the column kept its name in V4), and giving
+ * it a distinct brand would force a cast at every boundary while proving nothing — the server is
+ * what enforces that the node is actually a unit, via `requireUnit` and the `is_unit` foreign key.
+ */
+export type FlatId = PropertyNodeId;
+/** @deprecated A block is a property node. Use {@link PropertyNodeId}. */
+export type BlockId = PropertyNodeId;
 export type GateId = Brand<string, 'GateId'>;
 export type VisitId = Brand<string, 'VisitId'>;
 export type PassId = Brand<string, 'PassId'>;
@@ -35,7 +50,8 @@ export const asId = {
   township: (v: string) => v as TownshipId,
   user: (v: string) => v as UserId,
   flat: (v: string) => v as FlatId,
-  block: (v: string) => v as BlockId,
+  propertyNode: (v: string) => v as PropertyNodeId,
+  propertyLevel: (v: string) => v as PropertyLevelId,
   gate: (v: string) => v as GateId,
   visit: (v: string) => v as VisitId,
   pass: (v: string) => v as PassId,

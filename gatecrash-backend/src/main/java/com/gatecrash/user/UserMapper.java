@@ -1,6 +1,6 @@
 package com.gatecrash.user;
 
-import com.gatecrash.township.Flat;
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.user.dto.UserDtos.SalesAgentResponse;
 import com.gatecrash.user.dto.UserDtos.UserResponse;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 public class UserMapper {
 
     public UserResponse toResponse(AppUser user) {
-        Flat flat = user.getFlat();
+        PropertyNode unit = user.getUnit();
         return new UserResponse(
                 user.getId(),
                 user.getLoginId(),
@@ -28,9 +28,9 @@ public class UserMapper {
                 user.isActive(),
                 user.isMustResetPassword(),
                 user.isOnDuty(),
-                flat == null ? null : flat.getId(),
-                flat == null ? null : flat.getNumber(),
-                flat == null ? null : flat.getBlock().getName(),
+                unit == null ? null : unit.getId(),
+                unit == null ? null : unit.getCode(),
+                unit == null ? null : unit.containerName(),
                 user.getCreatedAt());
     }
 

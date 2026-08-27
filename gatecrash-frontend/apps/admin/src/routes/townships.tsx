@@ -9,7 +9,12 @@ import {
   type PageArgs,
   type TownshipResponse,
 } from '@gatecrash/api';
-import { formatDateTime, type TownshipId, type UserId } from '@gatecrash/core';
+import {
+  formatDateTime,
+  type PropertyType,
+  type TownshipId,
+  type UserId,
+} from '@gatecrash/core';
 import { Building2, Check, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +26,7 @@ import { Card } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -31,6 +37,11 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { TBody, TD, TH, THead, TR, Table, TableWrap } from '@/components/ui/table';
+import {
+  ProjectTypePicker,
+  levelShapeError,
+  type LevelDraft,
+} from '@/features/property/project-type-picker';
 import { CredentialDialog } from '@/features/users/credential-dialog';
 import { errorMessage, toastError } from '@/lib/errors';
 import { useSessionStore } from '@/lib/session';
@@ -566,18 +577,26 @@ function CreateTownshipDialog({
   const [name, setName] = useState('');
   const [adminLoginId, setAdminLoginId] = useState('');
   const [adminFullName, setAdminFullName] = useState('');
+  // The developer's project shape. Defaulted rather than left blank: every township needs a level
+  // set, and an apartment complex is the commonest answer -- but it is shown, not assumed silently.
+  const [propertyType, setPropertyType] = useState<PropertyType>('APARTMENT');
+  const [levels, setLevels] = useState<LevelDraft[] | null>(null);
 
-  const ready = code.trim() && name.trim() && adminLoginId.trim() && adminFullName.trim();
+  // Same rules the server enforces, checked here so Create is disabled rather than bouncing with
+  // a 422 once every other field has been filled in.
+  const levelsValid = levels === null || levelShapeError(levels) === null;
+  const ready =
+    code.trim() && name.trim() && adminLoginId.trim() && adminFullName.trim() && levelsValid;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{t('townships.form.title')}</DialogTitle>
           <DialogDescription>{t('townships.form.subtitle')}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <DialogBody>
           <Field label={t('townships.form.code')} hint={t('townships.form.codeHint')} required>
             {(props) => (
               <Input
@@ -596,6 +615,16 @@ function CreateTownshipDialog({
               <Input {...props} value={name} onChange={(event) => setName(event.target.value)} />
             )}
           </Field>
+
+          <p className="pt-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+            {t('townships.form.projectHeading')}
+          </p>
+          <ProjectTypePicker
+            value={propertyType}
+            onChange={setPropertyType}
+            levels={levels}
+            onLevelsChange={setLevels}
+          />
 
           <p className="pt-1 text-xs font-medium uppercase tracking-wide text-text-muted">
             {t('townships.form.adminHeading')}
@@ -620,7 +649,7 @@ function CreateTownshipDialog({
               />
             )}
           </Field>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
@@ -633,6 +662,18 @@ function CreateTownshipDialog({
                 {
                   code: code.trim().toUpperCase(),
                   name: name.trim(),
+                  propertyType,
+                  // Only sent when customised; otherwise the server seeds from the type's preset,
+                  // which keeps the two descriptions of the structure from drifting apart.
+                  ...(levels
+                    ? {
+                        levels: levels.map((l) => ({
+                          kind: l.kind,
+                          singular: l.singular.trim(),
+                          plural: l.plural.trim(),
+                        })),
+                      }
+                    : {}),
                   admin: { loginId: adminLoginId.trim(), fullName: adminFullName.trim() },
                 },
                 {

@@ -1,9 +1,9 @@
 import type {
   AudienceRule,
-  BlockId,
   Decision,
-  FlatId,
   GateId,
+  PropertyLevelId,
+  PropertyNodeId,
   InboxItemId,
   PostId,
   TownshipId,
@@ -17,6 +17,7 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
+import type { Endpoints } from '../endpoints';
 import type {
   CreateTownshipBody,
   TownshipAdminBody,
@@ -25,8 +26,13 @@ import type {
 import type { UserFilters, VisitFilters } from '../filters';
 import { PAGE_DEFAULTS, type PageArgs } from '../pagination';
 import type {
+  BulkCreateRequest,
+  CreateNodeRequest,
   CreateNotificationRequest,
   CreatePostRequest,
+  DefineLevelsRequest,
+  RenameLevelRequest,
+  UpdateNodeRequest,
   CreateUserRequest,
   CreateVisitRequest,
   CreatedTownshipResponse,
@@ -341,25 +347,109 @@ export function useSetUserActive() {
   });
 }
 
-// ── Township (§8.8) ─────────────────────────────────────────────────────────────────────────
+// ── Property tree (§8.8) ────────────────────────────────────────────────────────────────────
 
-export function useBlocks() {
+/**
+ * The township's levels and their labels. Everything structural depends on this, so it is fetched
+ * once and held: the shape of a project changes roughly never, and a screen that re-fetches it per
+ * tab flickers its own tab labels.
+ */
+export function usePropertyProfile() {
   const api = useEndpoints();
   return useQuery({
-    queryKey: qk.admin.blocks,
-    queryFn: ({ signal }) => api.township.listBlocks(signal),
-    staleTime: 5 * 60_000,
+    queryKey: qk.admin.propertyProfile,
+    queryFn: ({ signal }) => api.property.profile(signal),
+    staleTime: 30 * 60_000,
   });
 }
 
-export function useFlats(blockId?: BlockId | null) {
+/** Static reference data — the presets. Never changes within a session. */
+export function usePropertyTypes() {
   const api = useEndpoints();
   return useQuery({
-    queryKey: qk.admin.flats(blockId),
-    queryFn: ({ signal }) => api.township.listFlats(blockId, signal),
-    staleTime: 5 * 60_000,
+    queryKey: qk.admin.propertyTypes,
+    queryFn: ({ signal }) => api.property.types(signal),
+    staleTime: Infinity,
   });
 }
+
+/**
+ * Children of one node, or a whole level by depth. `enabled` is false when a parent is expected but
+ * not chosen yet, so selecting nothing shows an empty state rather than firing a request for the
+ * entire tree.
+ */
+export function usePropertyNodes(
+  params: { parentId?: PropertyNodeId | null; depth?: number | null } = {},
+  options: { enabled?: boolean } = {},
+) {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: qk.admin.propertyNodes(params.parentId, params.depth),
+    queryFn: ({ signal }) => api.property.listNodes(params, signal),
+    staleTime: 5 * 60_000,
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function usePropertyOccupancy() {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: qk.admin.propertyOccupancy,
+    queryFn: ({ signal }) => api.property.occupancy(signal),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Every property write invalidates the whole `propertyAll` prefix rather than the one list it
+ * touched. Creating a node changes its parent's `childCount`, the level's `nodeCount` and the list
+ * it landed in; predicting that set per mutation is how a stale child count survives on screen.
+ */
+function usePropertyMutation<TArgs, TResult>(fn: (api: Endpoints, args: TArgs) => Promise<TResult>) {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: TArgs) => fn(api, args),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.admin.propertyAll }),
+  });
+}
+
+export function useCreatePropertyNode() {
+  return usePropertyMutation((api, body: CreateNodeRequest) => api.property.createNode(body));
+}
+
+export function useUpdatePropertyNode() {
+  return usePropertyMutation((api, args: { id: PropertyNodeId; body: UpdateNodeRequest }) =>
+    api.property.updateNode(args.id, args.body),
+  );
+}
+
+export function useDeletePropertyNode() {
+  return usePropertyMutation((api, id: PropertyNodeId) => api.property.deleteNode(id));
+}
+
+export function useBulkCreateNodes() {
+  return usePropertyMutation((api, body: BulkCreateRequest) => api.property.bulkCreate(body));
+}
+
+/** Also invalidates occupancy, which `propertyAll` covers by prefix. */
+export function useSetOccupancy() {
+  return usePropertyMutation((api, args: { id: PropertyNodeId; declaredOccupancy: number }) =>
+    api.property.setOccupancy(args.id, { declaredOccupancy: args.declaredOccupancy }),
+  );
+}
+
+export function useRenamePropertyLevel() {
+  return usePropertyMutation((api, args: { id: PropertyLevelId; body: RenameLevelRequest }) =>
+    api.property.renameLevel(args.id, args.body),
+  );
+}
+
+export function useDefineLevels() {
+  return usePropertyMutation((api, body: DefineLevelsRequest) => api.property.defineLevels(body));
+}
+
+// ── Gates (§8.8) ────────────────────────────────────────────────────────────────────────────
 
 export function useGates() {
   const api = useEndpoints();
@@ -375,53 +465,6 @@ export function useSalesOnDuty() {
   return useQuery({
     queryKey: qk.salesOnDuty,
     queryFn: ({ signal }) => api.sales.onDuty(signal),
-  });
-}
-
-export function useCreateBlock() {
-  const api = useEndpoints();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (name: string) => api.township.createBlock({ name }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.admin.blocks }),
-  });
-}
-
-export function useDeleteBlock() {
-  const api = useEndpoints();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: BlockId) => api.township.deleteBlock(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.admin.blocks });
-      void qc.invalidateQueries({ queryKey: qk.admin.flatsAll });
-    },
-  });
-}
-
-export function useCreateFlat() {
-  const api = useEndpoints();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ blockId, number }: { blockId: BlockId; number: string }) =>
-      api.township.createFlat({ blockId, number }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.admin.flatsAll });
-      // `BlockResponse.flatCount` moved.
-      void qc.invalidateQueries({ queryKey: qk.admin.blocks });
-    },
-  });
-}
-
-export function useDeleteFlat() {
-  const api = useEndpoints();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: FlatId) => api.township.deleteFlat(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.admin.flatsAll });
-      void qc.invalidateQueries({ queryKey: qk.admin.blocks });
-    },
   });
 }
 
@@ -481,6 +524,19 @@ export function useTownshipAdmins(id: TownshipId | null) {
  * Onboards a township and its first admin. The generated password comes back through the mutation
  * result only and is never cached — same rule as `useCreateUser` (§14.3).
  */
+/**
+ * The onboarding project-type catalogue. Never changes within a session, and must be readable
+ * before a township exists — so it hangs off the `platform` key prefix, not `admin`.
+ */
+export function usePlatformPropertyTypes() {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: qk.platform.propertyTypes,
+    queryFn: ({ signal }) => api.platform.propertyTypes(signal),
+    staleTime: Infinity,
+  });
+}
+
 export function useCreateTownship() {
   const api = useEndpoints();
   const qc = useQueryClient();

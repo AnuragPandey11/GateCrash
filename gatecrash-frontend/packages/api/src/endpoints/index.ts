@@ -5,6 +5,7 @@ import { deviceEndpoints } from './devices';
 import { notificationEndpoints } from './notifications';
 import { passEndpoints } from './passes';
 import { platformEndpoints } from './platform';
+import { propertyEndpoints } from './property';
 import { salesEndpoints } from './sales';
 import { townshipEndpoints } from './township';
 import { adminUserEndpoints } from './users';
@@ -28,6 +29,7 @@ export function createEndpoints(client: ApiClient) {
     users: adminUserEndpoints(client),
     adminVisits: adminVisitEndpoints(client),
     township: townshipEndpoints(client),
+    property: propertyEndpoints(client),
     // SUPER_ADMIN only. Present on every client because the role is decided at runtime; every one
     // of these answers 403 for anyone else, which is the check that counts.
     platform: platformEndpoints(client),
@@ -43,6 +45,7 @@ export {
   notificationEndpoints,
   passEndpoints,
   platformEndpoints,
+  propertyEndpoints,
   salesEndpoints,
   townshipEndpoints,
   adminUserEndpoints,

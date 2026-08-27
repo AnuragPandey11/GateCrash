@@ -1,6 +1,6 @@
 import {
   useEndpoints,
-  useFlats,
+  usePropertyNodes,
   useGates,
   useVisitSearch,
   type VisitResponse,
@@ -51,6 +51,7 @@ import { useVisitFilters } from '@/features/visits/use-visit-filters';
 import { VisitDetailDrawer } from '@/features/visits/visit-detail-drawer';
 import { errorMessage } from '@/lib/errors';
 import { toast } from '@/lib/toast';
+import { useNomenclature } from '@/features/property/use-nomenclature';
 
 /**
  * The visitor log — FRONTEND.md §8.4.
@@ -69,7 +70,11 @@ export function VisitsRoute() {
   const { data, isPending, isError, error, refetch, isPlaceholderData } = useVisitSearch(filters, page);
 
   const gates = useGates();
-  const flats = useFlats();
+  const nom = useNomenclature();
+  const flats = usePropertyNodes(
+    { depth: nom.unitLevel?.depth ?? null },
+    { enabled: nom.unitLevel != null },
+  );
 
   const [exporting, setExporting] = useState<ExportProgress | null>(null);
 
@@ -78,9 +83,10 @@ export function VisitsRoute() {
   const flatsByBlock = useMemo(() => {
     const groups = new Map<string, { blockName: string; flats: { id: FlatId; number: string }[] }>();
     for (const flat of flatOptions ?? []) {
-      const entry = groups.get(flat.blockId) ?? { blockName: flat.blockName, flats: [] };
-      entry.flats.push({ id: flat.id, number: flat.number });
-      groups.set(flat.blockId, entry);
+      const key = flat.containerName ?? '';
+      const entry = groups.get(key) ?? { blockName: key, flats: [] };
+      entry.flats.push({ id: flat.id, number: flat.code ?? flat.name });
+      groups.set(key, entry);
     }
     return groups;
   }, [flatOptions]);

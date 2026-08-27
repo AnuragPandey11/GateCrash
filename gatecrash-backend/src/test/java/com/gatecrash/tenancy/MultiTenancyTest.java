@@ -1,10 +1,10 @@
 package com.gatecrash.tenancy;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.common.tenant.TenantContextFilter;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.gatecrash.township.Gate;
 import com.gatecrash.township.Township;
 import com.gatecrash.user.AppUser;
@@ -54,8 +54,8 @@ class MultiTenancyTest extends AbstractIntegrationTest {
 
     private Gate alphaGate;
     private Gate betaGate;
-    private Flat alphaFlat;
-    private Flat betaFlat;
+    private PropertyNode alphaFlat;
+    private PropertyNode betaFlat;
     private AppUser alphaAdmin;
     private AppUser betaAdmin;
     private AppUser alphaGuard;
@@ -205,26 +205,26 @@ class MultiTenancyTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("the same block and flat names coexist in two townships")
     void namesCollideAcrossTownshipsWithoutConflict() throws Exception {
-        mockMvc.perform(post("/api/v1/admin/blocks")
+        mockMvc.perform(post("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(alphaAdmin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "Tower 9"))))
                 .andExpect(status().isCreated());
 
         // Same name, other township: allowed, because uniqueness is per tenant.
-        mockMvc.perform(post("/api/v1/admin/blocks")
+        mockMvc.perform(post("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(betaAdmin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "Tower 9"))))
                 .andExpect(status().isCreated());
 
         // Same name, same township: still a conflict.
-        mockMvc.perform(post("/api/v1/admin/blocks")
+        mockMvc.perform(post("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(alphaAdmin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "Tower 9"))))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("BLOCK_EXISTS"));
+                .andExpect(jsonPath("$.code").value("NODE_NAME_EXISTS"));
     }
 
     @Test
@@ -243,7 +243,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
     @DisplayName("an admin cannot delete a flat in another township")
     void cannotDeleteAnotherTownshipsFlat() throws Exception {
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .delete("/api/v1/admin/flats/" + betaFlat.getId())
+                        .delete("/api/v1/admin/property/nodes/" + betaFlat.getId())
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(alphaAdmin)))
                 .andExpect(status().isNotFound());
     }
@@ -438,7 +438,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
                         "password", TestDataFactory.PASSWORD))));
     }
 
-    private UUID logWalkIn(AppUser guard, Gate gate, Flat flat) throws Exception {
+    private UUID logWalkIn(AppUser guard, Gate gate, PropertyNode flat) throws Exception {
         Map<String, Object> request = new HashMap<>();
         request.put("gateId", gate.getId().toString());
         request.put("visitorType", "GUEST");

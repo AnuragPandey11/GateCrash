@@ -21,7 +21,7 @@ public class VisitMapper {
                 visit.getApproverId(),
                 visit.getApprover() == null ? null : visit.getApprover().getFullName(),
                 visit.getTargetFlatId(),
-                visit.getTargetFlat() == null ? null : visit.getTargetFlat().getNumber(),
+                visit.getTargetUnit() == null ? null : visit.getTargetUnit().getCode(),
                 visit.getPreApproval() == null ? null : visit.getPreApproval().getId(),
                 visit.getLoggedBy() == null ? null : visit.getLoggedBy().getFullName(),
                 visit.getCreatedAt(),

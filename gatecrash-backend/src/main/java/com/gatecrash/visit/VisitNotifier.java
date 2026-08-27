@@ -53,7 +53,7 @@ public class VisitNotifier {
         }
 
         String gateName = visit.getGate().getName();
-        String flatNumber = visit.getTargetFlat() == null ? null : visit.getTargetFlat().getNumber();
+        String flatNumber = visit.getTargetUnit() == null ? null : visit.getTargetUnit().getCode();
 
         RealtimeEvents.VisitRequestedEvent event = RealtimeEvents.VisitRequestedEvent.of(
                 visit.getId(), visit.getGate().getId(), gateName, visit.getVisitorName(),

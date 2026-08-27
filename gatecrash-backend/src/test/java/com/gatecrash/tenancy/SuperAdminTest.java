@@ -17,6 +17,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -103,24 +104,156 @@ class SuperAdminTest extends AbstractIntegrationTest {
     void superAdminActsInsideANamedTownship() throws Exception {
         UUID townshipId = createdTownshipId("HILLVIEW", "hillview-admin");
 
-        mockMvc.perform(post("/api/v1/admin/blocks")
+        mockMvc.perform(post("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("name", "Tower 1"))))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/v1/admin/blocks")
+        mockMvc.perform(get("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Tower 1"));
     }
 
+    // ----- onboarding: the developer's project shape ------------------------------------------
+
+    @Test
+    @DisplayName("the project-type catalogue is readable before any township exists")
+    void projectTypeCatalogueNeedsNoTownship() throws Exception {
+        // The whole point: this is the first screen of onboarding, when there is no township to
+        // name in X-Township-Id. The tenant-scoped /admin/property/types cannot serve it.
+        mockMvc.perform(get("/api/v1/super/property-types")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.value == 'VILLA')].label").value(
+                        org.hamcrest.Matchers.hasItem("Villa community")))
+                .andExpect(jsonPath("$[?(@.value == 'RETAIL')].categoryLabel").value(
+                        org.hamcrest.Matchers.hasItem("Commercial")))
+                // The level set each preset would seed comes with it, so the console can show the
+                // resulting structure before the township is created -- and the level set is the
+                // one thing that cannot be reshaped afterwards.
+                .andExpect(jsonPath("$[?(@.value == 'RETAIL')].defaultLevels[2].singular").value(
+                        org.hamcrest.Matchers.hasItem("Shop")));
+    }
+
+    @Test
+    @DisplayName("onboarding with a project type seeds that developer's vocabulary")
+    void onboardingSeedsTheChosenVocabulary() throws Exception {
+        UUID townshipId = createdTownshipWithType("PALMGROVE", "palm-admin", "VILLA");
+
+        mockMvc.perform(get("/api/v1/admin/property/profile")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.propertyType").value("VILLA"))
+                .andExpect(jsonPath("$.hasFloors").value(false))
+                .andExpect(jsonPath("$.levels[0].singular").value("Cluster"))
+                .andExpect(jsonPath("$.levels[1].singular").value("Villa"));
+    }
+
+    @Test
+    @DisplayName("a mall is onboarded as levels of shops, not blocks of flats")
+    void onboardingACommercialProject() throws Exception {
+        UUID townshipId = createdTownshipWithType("CITYMALL", "mall-admin", "RETAIL");
+
+        mockMvc.perform(get("/api/v1/admin/property/profile")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
+                .andExpect(jsonPath("$.hasFloors").value(true))
+                .andExpect(jsonPath("$.levels[1].plural").value("Levels"))
+                .andExpect(jsonPath("$.levels[2].plural").value("Shops"));
+    }
+
+    @Test
+    @DisplayName("a super admin can describe a structure no preset covers")
+    void onboardingWithACustomStructure() throws Exception {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("code", "BESPOKE");
+        body.put("name", "Bespoke Estate");
+        body.put("propertyType", "MIXED_USE");
+        body.put("levels", List.of(
+                Map.of("kind", "GROUP", "singular", "Precinct", "plural", "Precincts"),
+                Map.of("kind", "BUILDING", "singular", "Pod", "plural", "Pods"),
+                Map.of("kind", "UNIT", "singular", "Residence", "plural", "Residences")));
+        body.put("admin", Map.of("loginId", "bespoke-admin", "fullName", "Bespoke Admin"));
+
+        String response = mockMvc.perform(post("/api/v1/super/townships")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(body)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        UUID townshipId = UUID.fromString(
+                objectMapper.readTree(response).get("township").get("id").asText());
+
+        // The explicit levels win over the type's preset, while the type is still recorded.
+        mockMvc.perform(get("/api/v1/admin/property/profile")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
+                .andExpect(jsonPath("$.propertyType").value("MIXED_USE"))
+                .andExpect(jsonPath("$.levels.length()").value(3))
+                .andExpect(jsonPath("$.levels[0].singular").value("Precinct"))
+                .andExpect(jsonPath("$.levels[1].singular").value("Pod"))
+                .andExpect(jsonPath("$.levels[2].singular").value("Residence"));
+    }
+
+    @Test
+    @DisplayName("a custom structure is validated at onboarding, not after handover")
+    void customStructureIsValidatedUpFront() throws Exception {
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("code", "BADSHAPE");
+        body.put("name", "Bad Shape");
+        // A floor inside a phase is not a thing, and catching it now beats discovering it once
+        // the tree is populated and the level set can no longer be reshaped.
+        body.put("levels", List.of(
+                Map.of("kind", "GROUP", "singular", "Phase", "plural", "Phases"),
+                Map.of("kind", "FLOOR", "singular", "Floor", "plural", "Floors"),
+                Map.of("kind", "UNIT", "singular", "Flat", "plural", "Flats")));
+        body.put("admin", Map.of("loginId", "bad-admin", "fullName", "Bad Admin"));
+
+        mockMvc.perform(post("/api/v1/super/townships")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(body)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("FLOOR_NEEDS_BUILDING"));
+    }
+
+    @Test
+    @DisplayName("omitting the project type still yields a usable township")
+    void onboardingWithoutATypeFallsBackToApartment() throws Exception {
+        UUID townshipId = createdTownshipId("PLAINVIEW", "plain-admin");
+
+        mockMvc.perform(get("/api/v1/admin/property/profile")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
+                .andExpect(jsonPath("$.propertyType").value("APARTMENT"))
+                .andExpect(jsonPath("$.levels[0].singular").value("Tower"));
+    }
+
+    /** Onboards a township of a named project type and returns its id. */
+    private UUID createdTownshipWithType(String code, String adminLoginId, String propertyType)
+            throws Exception {
+        String response = mockMvc.perform(post("/api/v1/super/townships")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "code", code,
+                                "name", code + " Project",
+                                "propertyType", propertyType,
+                                "admin", Map.of("loginId", adminLoginId, "fullName", "An Admin")))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return UUID.fromString(objectMapper.readTree(response).get("township").get("id").asText());
+    }
+
     @Test
     @DisplayName("a township-scoped endpoint without the tenant header says so plainly")
     void superAdminMustNameATownshipForScopedWork() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/blocks")
+        mockMvc.perform(get("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("TOWNSHIP_CONTEXT_REQUIRED"));
@@ -129,13 +262,13 @@ class SuperAdminTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("a tenant header naming no township is a 404, and a malformed one a 400")
     void tenantHeaderIsValidated() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/blocks")
+        mockMvc.perform(get("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, UUID.randomUUID().toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TOWNSHIP_NOT_FOUND"));
 
-        mockMvc.perform(get("/api/v1/admin/blocks")
+        mockMvc.perform(get("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, "not-a-uuid"))
                 .andExpect(status().isBadRequest())
@@ -260,7 +393,7 @@ class SuperAdminTest extends AbstractIntegrationTest {
         UUID townshipId = createdTownshipId("EASTGATE", "eastgate-admin");
         archive(townshipId, "EASTGATE").andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/v1/admin/blocks")
+        mockMvc.perform(post("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -282,7 +415,7 @@ class SuperAdminTest extends AbstractIntegrationTest {
 
         // Unlike an archived one, a suspended township is still reachable by the operator who has to
         // go in and fix whatever caused the suspension.
-        mockMvc.perform(get("/api/v1/admin/blocks")
+        mockMvc.perform(get("/api/v1/admin/property/nodes")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(superAdmin))
                         .header(TenantContextFilter.TOWNSHIP_HEADER, townshipId.toString()))
                 .andExpect(status().isOk());

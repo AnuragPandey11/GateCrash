@@ -1,7 +1,7 @@
 package com.gatecrash.config;
 
-import com.gatecrash.township.BuildingBlockRepository;
-import com.gatecrash.township.FlatRepository;
+import com.gatecrash.property.PropertyNodeRepository;
+import com.gatecrash.property.PropertyService;
 import com.gatecrash.township.GateRepository;
 import com.gatecrash.township.TownshipRepository;
 import com.gatecrash.user.AppUserRepository;
@@ -34,8 +34,8 @@ class DevDataSeederTest {
 
     private final AppUserRepository users = mock(AppUserRepository.class);
     private final TownshipRepository townships = mock(TownshipRepository.class);
-    private final BuildingBlockRepository blocks = mock(BuildingBlockRepository.class);
-    private final FlatRepository flats = mock(FlatRepository.class);
+    private final PropertyNodeRepository nodes = mock(PropertyNodeRepository.class);
+    private final PropertyService property = mock(PropertyService.class);
     private final GateRepository gates = mock(GateRepository.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
 
@@ -49,7 +49,7 @@ class DevDataSeederTest {
                 .hasMessageContaining("must never exist in a real");
 
         // Nothing was written before the refusal -- it fails closed, not halfway.
-        verifyNoInteractions(users, townships, blocks, flats, gates);
+        verifyNoInteractions(users, townships, nodes, property, gates);
     }
 
     @Test
@@ -60,7 +60,7 @@ class DevDataSeederTest {
             assertThatCode(() -> seeder.run(new DefaultApplicationArguments()))
                     .doesNotThrowAnyException();
         }
-        verifyNoInteractions(users, townships, blocks, flats, gates);
+        verifyNoInteractions(users, townships, nodes, property, gates);
     }
 
     @Test
@@ -95,7 +95,7 @@ class DevDataSeederTest {
     private DevDataSeeder seeder(AppProperties properties, String... profiles) {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles(profiles);
-        return new DevDataSeeder(users, townships, blocks, flats, gates, passwordEncoder,
+        return new DevDataSeeder(users, townships, nodes, property, gates, passwordEncoder,
                 new PasswordPolicy(properties), properties, environment);
     }
 

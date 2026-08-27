@@ -1,6 +1,6 @@
 package com.gatecrash.user;
 
-import com.gatecrash.township.Flat;
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.township.Township;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -86,10 +86,18 @@ public class AppUser {
     @Column(name = "created_by")
     private UUID createdBy;
 
-    /** Residents only; enforced by the {@code resident_needs_flat} check constraint. */
+    /**
+     * The unit this resident lives in. Residents only, enforced by the {@code resident_needs_flat}
+     * check constraint, and pinned to the addressable level by {@code user_unit_same_township} --
+     * a resident cannot be filed under a floor or a whole tower.
+     *
+     * <p>The column is still named {@code flat_id}: V4 repointed it from the retired {@code flat}
+     * table to {@code property_node} without renaming it, so that migration stayed a pure
+     * structural change. The Java side is free to say what it now means.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "flat_id")
-    private Flat flat;
+    private PropertyNode unit;
 
     /** SALES presence, drives the guard's on-duty dropdown. */
     @Column(name = "is_on_duty", nullable = false)
@@ -111,8 +119,14 @@ public class AppUser {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    /** Kept as {@code getFlatId} while the API still speaks {@code flatId}; see {@link #unit}. */
     public UUID getFlatId() {
-        return flat == null ? null : flat.getId();
+        return unit == null ? null : unit.getId();
+    }
+
+    /** The unit's addressable code ({@code A-1401}), or null for anyone who is not a resident. */
+    public String getUnitCode() {
+        return unit == null ? null : unit.getCode();
     }
 
     public UUID getTownshipId() {

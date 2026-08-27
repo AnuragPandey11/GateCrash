@@ -1,9 +1,9 @@
 package com.gatecrash.user;
 
+import com.gatecrash.property.PropertyNode;
 import com.gatecrash.support.AbstractIntegrationTest;
 import com.gatecrash.support.TestAuth;
 import com.gatecrash.support.TestDataFactory;
-import com.gatecrash.township.Flat;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +36,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     private RefreshTokenRepository refreshTokens;
 
     private AppUser resident;
-    private Flat flat;
+    private PropertyNode flat;
 
     @BeforeEach
     void seed() {

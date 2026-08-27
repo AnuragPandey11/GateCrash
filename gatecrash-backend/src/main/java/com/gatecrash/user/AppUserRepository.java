@@ -70,12 +70,23 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
     List<AppUser> findByTownship_IdAndRoleAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
             UUID townshipId, UserRole role);
 
-    /** Base for the per-flat resident login-id sequence. Counts inactive accounts too, deliberately:
+    /** Base for the per-unit resident login-id sequence. Counts inactive accounts too, deliberately:
      *  a deactivated {@code A-101-2} must not have its login id handed to a new resident.
-     *  Flat ids are globally unique, so this is already confined to one township. */
-    long countByFlat_Id(UUID flatId);
+     *  Unit ids are globally unique, so this is already confined to one township. */
+    long countByUnit_Id(UUID unitId);
 
-    List<AppUser> findByFlat_IdAndRoleAndActiveTrue(UUID flatId, UserRole role);
+    /**
+     * Accounts that can currently sign in for this unit -- the floor under its declared occupancy.
+     * Distinct from {@link #countByUnit_Id}, which includes deactivated accounts because the login-id
+     * sequence must never reissue a retired id.
+     *
+     * <p>Derived rather than a {@code @Query}: an enum written as a literal inside JPQL renders as a
+     * cast to the Java type name, and the Postgres type is {@code user_role}. Bound parameters go
+     * through the enum mapping instead, which is why every other role query here binds one too.
+     */
+    long countByUnit_IdAndRoleAndActiveTrue(UUID unitId, UserRole role);
+
+    List<AppUser> findByUnit_IdAndRoleAndActiveTrue(UUID unitId, UserRole role);
 
     long countByTownship_IdAndRoleAndActiveTrue(UUID townshipId, UserRole role);
 
@@ -122,15 +133,32 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
 
     @Query("""
            select u.id from AppUser u
-            where u.active = true and u.township.id = :townshipId and u.flat.id in :flatIds
+            where u.active = true and u.township.id = :townshipId and u.unit.id in :unitIds
            """)
-    List<UUID> findActiveUserIdsByFlatIds(@Param("townshipId") UUID townshipId,
-                                          @Param("flatIds") Collection<UUID> flatIds);
+    List<UUID> findActiveUserIdsByUnitIds(@Param("townshipId") UUID townshipId,
+                                          @Param("unitIds") Collection<UUID> unitIds);
 
+    /**
+     * Everyone living anywhere beneath the named nodes, at any depth.
+     *
+     * <p>Replaces the old {@code u.flat.block.id in :blockIds}, which could only express one hop
+     * because the hierarchy was only ever two levels deep. Against a tree, "everyone in Tower A"
+     * and "everyone in Phase 2" are the same question asked at different depths, and the
+     * materialized path answers both as a prefix match rather than a join per level.
+     *
+     * <p>Still one parameterised query anchored on the township: the {@code like} pattern is built
+     * from a path the database itself generated out of UUIDs, so a caller cannot smuggle a wildcard
+     * into it, and an ancestor id from another township matches nothing.
+     */
     @Query("""
            select u.id from AppUser u
-            where u.active = true and u.township.id = :townshipId and u.flat.block.id in :blockIds
+            where u.active = true and u.township.id = :townshipId
+              and exists (select 1 from PropertyNode a
+                           where a.id in :nodeIds
+                             and a.township.id = :townshipId
+                             and u.unit.path like concat(a.path, '%'))
            """)
-    List<UUID> findActiveUserIdsByBlockIds(@Param("townshipId") UUID townshipId,
-                                           @Param("blockIds") Collection<UUID> blockIds);
+    List<UUID> findActiveUserIdsUnderNodes(@Param("townshipId") UUID townshipId,
+                                           @Param("nodeIds") Collection<UUID> nodeIds);
+
 }

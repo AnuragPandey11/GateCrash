@@ -91,25 +91,67 @@ CREATE TABLE township (
     CONSTRAINT archived_is_stamped CHECK (status <> 'ARCHIVED' OR archived_at IS NOT NULL)
 );
 
--- ---------- Township structure ----------
-CREATE TABLE building_block (
+-- ---------- Township structure: the property tree ----------
+-- V4 replaced the fixed building_block -> flat pair with a per-township tree. "Township with
+-- blocks of flats" is one shape of real-estate project among many: a villa developer has
+-- clusters of villas and no floors at all, a plotted layout has sectors of plots, a high-rise
+-- has towers of floors of flats. All three previously had to call a cluster a "Block".
+--
+-- property_level is the SHAPE of one township's tree -- an ordered list of levels, each with the
+-- developer's own word for it. It is what makes the admin console dynamic: the console renders
+-- one tab per level using these labels rather than a hardcoded Blocks/Flats pair.
+
+CREATE TABLE property_level (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    township_id UUID NOT NULL REFERENCES township(id) ON DELETE CASCADE,
+    depth       INT  NOT NULL,                     -- 0 is outermost, contiguous
+    kind        property_node_kind NOT NULL,       -- GROUP | BUILDING | FLOOR | UNIT
+    singular    TEXT NOT NULL,                     -- "Tower", "Villa", "Plot"
+    plural      TEXT NOT NULL,                     -- "Towers", "Villas", "Plots"
+    UNIQUE (township_id, depth),
+    UNIQUE (township_id, depth, kind)              -- FK target for property_node
+);
+-- Exactly one addressable level per township: this is what makes "the unit level" well defined.
+CREATE UNIQUE INDEX ux_property_level_unit ON property_level(township_id) WHERE kind = 'UNIT';
+
+CREATE TABLE property_node (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     township_id UUID NOT NULL REFERENCES township(id),
-    name        TEXT NOT NULL,                     -- "Block A", "Tower 3"
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (township_id, lower(name))              -- per tenant, not global
+    parent_id   UUID REFERENCES property_node(id),
+    depth       INT  NOT NULL,                     -- derived by trigger: parent.depth + 1
+    kind        property_node_kind NOT NULL,
+    name        TEXT NOT NULL,                     -- "Tower A", "14", "A-1401"
+    code        TEXT,                              -- UNIT only: what a guard types; login-id base
+    level_number INT,                              -- FLOOR only; signed, because basements are real
+    declared_occupancy INT NOT NULL DEFAULT 0,     -- UNIT only: people, incl. those with no account
+    path        TEXT NOT NULL,                     -- derived: '/root/child/self/'
+    is_unit     BOOLEAN NOT NULL,                  -- derived; exists to be an FK target
+    CONSTRAINT property_node_root_ok  CHECK ((parent_id IS NULL) = (depth = 0)),
+    CONSTRAINT property_node_code_ok  CHECK ((code IS NOT NULL) = (kind = 'UNIT')),
+    CONSTRAINT property_node_level_ok CHECK (level_number IS NULL OR kind = 'FLOOR'),
+    CONSTRAINT property_node_occupancy_ok
+        CHECK (declared_occupancy >= 0 AND (kind = 'UNIT' OR declared_occupancy = 0)),
+    CONSTRAINT property_node_is_unit_ok CHECK (is_unit = (kind = 'UNIT')),
+    UNIQUE (id, township_id),
+    UNIQUE (id, township_id, is_unit),
+    -- A node cannot be parented into another township...
+    FOREIGN KEY (parent_id, township_id) REFERENCES property_node(id, township_id),
+    -- ...nor exist at a depth its township never defined, nor with the wrong kind for it.
+    FOREIGN KEY (township_id, depth, kind)
+        REFERENCES property_level(township_id, depth, kind)
 );
 
-CREATE TABLE flat (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    township_id UUID NOT NULL REFERENCES township(id),
-    block_id    UUID NOT NULL REFERENCES building_block(id),
-    number      TEXT NOT NULL,                     -- "A-101"
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (block_id, number),
-    -- A flat cannot belong to a block in a different township.
-    FOREIGN KEY (block_id, township_id) REFERENCES building_block(id, township_id)
-);
+-- Unit codes are unique per TOWNSHIP, stricter than the per-block rule they replaced. Resident
+-- login ids are derived as <code>-<n>, so two blocks that each held a "101" both minted "101-1".
+CREATE UNIQUE INDEX ux_node_unit_code  ON property_node(township_id, lower(code)) WHERE kind = 'UNIT';
+CREATE UNIQUE INDEX ux_node_floor_level ON property_node(parent_id, level_number)
+    WHERE kind = 'FLOOR' AND level_number IS NOT NULL;
+CREATE INDEX idx_node_path ON property_node(township_id, path text_pattern_ops);
+
+-- depth, path and is_unit are maintained by a BEFORE trigger, never supplied. The trigger also
+-- refuses a child of a UNIT (a unit is a leaf) and refuses re-parenting (it would strand the
+-- stored path of every descendant). depth = parent.depth + 1 is what makes a cycle
+-- unrepresentable: a cycle needs a node whose depth is not one more than its parent's.
 
 CREATE TABLE gate (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -320,8 +362,10 @@ CREATE INDEX idx_audit_entity ON audit_log(entity, entity_id);
 
 ### Relationship summary
 
-- `township 1─* {building_block, flat, gate, app_user, pre_approval, visitor_log, community_post, notification}` — the tenant is the root of everything
-- `building_block 1─* flat 1─* app_user(RESIDENT)`
+- `township 1─* {property_level, property_node, gate, app_user, pre_approval, visitor_log, community_post, notification}` — the tenant is the root of everything
+- `township 1─* property_level` — the shape of its tree; exactly one level has `kind = 'UNIT'`
+- `property_node 0..1─* property_node` — the tree itself, max depth 6, every node pinned to a defined level
+- `property_node(kind='UNIT') 1─* app_user(RESIDENT)` — residents attach to the addressable level only, enforced by the composite `(id, township_id, is_unit)` key
 - `app_user 1─* device` (FCM tokens; multi-device)
 - `app_user(RESIDENT|SALES) 1─* pre_approval`
 - `visitor_log *─1 gate`, `*─1 app_user(logged_by=guard)`, `*─0..1 app_user(approver)`, `*─0..1 pre_approval` — each additionally pinned to the same township by a composite FK
@@ -346,6 +390,16 @@ label cannot be *used* until that transaction commits, and Flyway runs each migr
 - `V3__multi_tenancy.sql` — the `township` table, every `township_id` column, the re-scoped unique
   indexes, the composite foreign keys, and the bootstrap `superadmin` row. Existing rows are adopted
   into a `DEFAULT` township, which on a fresh install is simply the first township, ready to use.
+- `V4__property_tree.sql` — `property_type` on `township`, the `property_level` / `property_node`
+  pair, and `flat.declared_occupancy`'s successor `property_node.declared_occupancy`. Existing
+  `building_block` and `flat` rows are copied into `property_node` **preserving their UUIDs**, so
+  `app_user.flat_id` and `visitor_log.target_flat_id` keep their values verbatim and only their
+  foreign-key target moves. Both columns deliberately keep the name `flat_id`: renaming them is a
+  separate migration for once the frontend stops sending `flatId`, so this one stays a pure
+  structural change. The old tables are dropped at the end.
+
+  Note the difference from V2's constraint: V4 *creates* enum types rather than adding labels to an
+  existing one, and a freshly created type is usable in the same transaction — so it needs no split.
 
 ---
 
@@ -422,16 +476,85 @@ All roles authenticate with **`townshipCode` + `login_id` + password** (no OTP, 
 ### Admin ops
 | Method | Path | Role | Purpose |
 |--------|------|------|---------|
-| GET | `/admin/inside` | ADMIN | Live "who's inside" (visits where status = CHECKED_IN) |
+| GET | `/admin/inside` | ADMIN | Live "who's inside" (visits where status = CHECKED_IN). The guard's screen; **not** the developer's occupancy figure — see `/admin/property/occupancy` |
 | GET | `/admin/visits` | ADMIN | Filterable visitor log export |
 | POST | `/admin/users` | ADMIN | **Provision an account.** For residents: `{role:"RESIDENT", flatId, fullName}` → server assigns the next per-flat `login_id` (`A-101-1`, `A-101-2`, …); for sales/guard: `{role, loginId, fullName}`. Server **auto-generates the password** and **returns it once** for the admin to hand over |
 | POST | `/admin/users/{id}/reset-password` | ADMIN | Auto-generate a new password, return it once, set `must_reset_password=true` |
 | GET/PATCH/DELETE | `/admin/users`, `/admin/users/{id}` | ADMIN | List / edit / deactivate accounts |
-| CRUD | `/admin/blocks`, `/admin/flats`, `/admin/gates` | ADMIN | Township structure |
+| CRUD | `/admin/gates` | ADMIN | Gates |
+| GET | `/admin/property/profile` | ADMIN, GUARD | The township's project type and its ordered, labelled levels — **the console renders its structure tabs from this**, which is what makes the panel adapt per developer |
+| GET | `/admin/property/types` | ADMIN | The project presets and their default level sets (same payload as `/super/property-types`) |
+| PUT | `/admin/property/levels` | ADMIN | Replace the level set. Refused once any node exists (`409 PROPERTY_TREE_NOT_EMPTY`) — re-depthing a populated tree has no safe automatic answer |
+| PATCH | `/admin/property/levels/{id}` | ADMIN | Rename one level. Stays available after the tree is populated, because it changes nothing structural |
+| CRUD | `/admin/property/nodes` | ADMIN (GUARD reads) | The tree. A node's `kind` comes from the level it lands at, never from the request |
+| POST | `/admin/property/nodes/bulk` | ADMIN | Generate a building's floors and units in one transaction |
+| PUT | `/admin/property/nodes/{id}/occupancy` | ADMIN | Set a unit's declared headcount |
+| GET | `/admin/property/occupancy` | ADMIN | Occupancy summary — see below |
+
+### Occupancy: three different questions that share one word
+
+Before V4 the only thing in the system carrying the word "occupancy" was `GET /admin/inside`, which
+counts `visitor_log` rows in `CHECKED_IN` — **visitors physically on the premises right now**. That
+is a live security number and a useful one, but it is not what a real-estate developer means by
+occupancy, and nothing answered what they do mean.
+
+`GET /admin/property/occupancy` reports all three separately, deliberately not collapsed into one
+headline:
+
+| Field | Question it answers | Source |
+|-------|--------------------|--------|
+| `occupancyRate`, `occupiedUnits`, `totalUnits` | How much of the project is lived in? — **the developer's metric** | units with a declared headcount **or** ≥1 active resident account |
+| `residentHeadcount` | How many people live here? | `SUM(property_node.declared_occupancy)` |
+| `registeredResidentAccounts` | How many of them can actually sign in? | active `app_user` rows with `role = RESIDENT` |
+| `visitorsInside` | Who is on site right now? | `visitor_log` where `status = CHECKED_IN` |
+
+**Why `declared_occupancy` exists rather than counting accounts.** A flat with four occupants
+typically has *one* login — the owner's. The spouse, children and parents never sign up. Deriving
+headcount from `app_user` would report that household as one person. So the headcount is declared
+per unit, and the account count is reported *alongside* it rather than instead of it: the gap
+between the two is itself the interesting figure, because it is how many residents cannot yet be
+notified of anything.
+
+**The consistency rule.** `declared_occupancy` can never sit below the number of active resident
+accounts on that unit. Provisioning a resident raises it automatically
+(`UserProvisioningService` → `PropertyService.raiseDeclaredOccupancy`), and setting it manually
+below the account count is a `409 OCCUPANCY_BELOW_RESIDENTS`. The two can therefore only disagree in
+the direction of the declaration being *higher*, which is exactly the legitimate case. The invariant
+spans two tables, so it lives in the service layer rather than in a `CHECK`.
 
 `POST /admin/users` refuses `role: "ADMIN"` from a township admin (`403 ADMIN_REQUIRES_SUPER_ADMIN`)
 and refuses `role: "SUPER_ADMIN"` outright (`422 ROLE_NOT_PROVISIONABLE`). Appointing the account
 with authority over every other account in a township is a platform action, not a township one.
+
+### Onboarding a developer: choosing the project shape
+
+`POST /super/townships` takes **`propertyType`** — the kind of project this developer builds — and
+optionally an explicit **`levels`** array for a structure no preset covers. The type seeds the
+township's level set, so its admin's first visit to the structure screen already says Malls, Levels
+and Shops rather than Blocks and Flats.
+
+`GET /super/property-types` is the catalogue, and it is **tenantless on purpose**: a super admin
+onboarding a *new* developer has no township to name in `X-Township-Id`, so the tenant-scoped
+`/admin/property/types` would answer `422 TOWNSHIP_CONTEXT_REQUIRED` on the first screen of the
+flow. It returns each type's category, description and the level set it would seed, so the console
+can show the resulting structure before anything is created.
+
+**Why the choice belongs at onboarding.** The level set cannot be reshaped once the tree holds
+anything (`409 PROPERTY_TREE_NOT_EMPTY`) — inserting a Floor level under towers that already hold
+flats has no safe automatic answer to which floor each flat belongs on. Onboarding is therefore the
+only cheap moment to get the shape right, which is why the picker shows the structure inline rather
+than hiding it behind a dropdown label. An explicit `levels` array is validated with exactly the
+same rules `PUT /admin/property/levels` applies, so a shape that could not be set later cannot be
+set here either.
+
+| Category | Types |
+|---|---|
+| Residential | `APARTMENT` (Tower→Floor→Flat) · `VILLA` (Cluster→Villa) · `ROW_HOUSE` · `PLOTTED` (Sector→Plot) · `GATED_TOWNSHIP` (Phase→Block→Floor→Flat) · `CO_LIVING` (Building→Floor→Room) · `STUDENT_HOUSING` · `SENIOR_LIVING` · `SERVICED_APARTMENT` · `FARMHOUSE` |
+| Commercial | `COMMERCIAL` (Tower→Floor→Office) · `IT_PARK` · `RETAIL` (Mall→Level→Shop) · `INDUSTRIAL` |
+| Mixed | `MIXED_USE` (Phase→Building→Floor→Unit) |
+
+The type is a *starting point*, never a constraint: every label stays editable, and nothing in the
+code branches on it — `PropertyNodeKind` is what decisions are made on.
 
 ### Platform ops (SUPER_ADMIN only)
 Everything under `/super` acts **on** townships rather than inside one, and needs no
@@ -525,7 +648,7 @@ The tenant predicate on resolution is not incidental. Six digits is a million-va
 - **WS auth:** JWT validated on STOMP `CONNECT`; a channel interceptor rejects subscribes to gates/queues the principal doesn't own.
 
 ### Notification fan-out (targeting engine)
-`POST /notifications` with an `audienceRule` JSONB. The service compiles the rule into a single parameterized SQL query against `app_user` (+ `flat`/`building_block` joins), e.g.:
+`POST /notifications` with an `audienceRule` JSONB. The service compiles the rule into a single parameterized SQL query against `app_user` (+ `property_node` joins), e.g.:
 - `ALL` → all active users
 - `ALL_EXCEPT roles:[GUARD]` → `WHERE role NOT IN (:excluded)`
 - `ROLES:[SALES]` → `WHERE role IN (:roles)`

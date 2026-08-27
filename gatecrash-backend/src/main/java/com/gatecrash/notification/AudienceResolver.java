@@ -29,6 +29,11 @@ import java.util.UUID;
  * amount of care at the call site should be relied on to preserve -- so it lives in the queries
  * themselves. A {@code FLATS} or {@code BLOCKS} rule naming another township's ids resolves to no
  * users at all, and is then rejected as an empty audience rather than delivering anywhere.
+ *
+ * <p>{@code BLOCKS} outgrew its name in V4 and now means "everyone anywhere beneath these nodes",
+ * at any depth: name a tower and it reaches every flat in it, name a phase and it reaches the whole
+ * phase. The wire name is kept because clients send it; the resolver no longer assumes the thing
+ * named is one hop above a unit, because in a villa community or a phased township it is not.
  */
 @Component
 @RequiredArgsConstructor
@@ -47,9 +52,9 @@ public class AudienceResolver {
             case ALL -> users.findActiveUserIds(townshipId);
             case ALL_EXCEPT -> users.findActiveUserIdsExcludingRoles(townshipId, requireRoles(rule));
             case ROLES -> users.findActiveUserIdsByRoles(townshipId, requireRoles(rule));
-            case FLATS -> users.findActiveUserIdsByFlatIds(townshipId,
+            case FLATS -> users.findActiveUserIdsByUnitIds(townshipId,
                     requireIds(rule.flatIds(), "flatIds"));
-            case BLOCKS -> users.findActiveUserIdsByBlockIds(townshipId,
+            case BLOCKS -> users.findActiveUserIdsUnderNodes(townshipId,
                     requireIds(rule.blockIds(), "blockIds"));
         };
     }
