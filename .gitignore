@@ -1,0 +1,2 @@
+# Salesforce CLI local state (org metadata caches); machine-specific, never committed.
+.sf/
