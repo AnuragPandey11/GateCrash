@@ -67,8 +67,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
     // ----- Operational reads ------------------------------------------------------------------
 
     /** Guard's on-duty dropdown. Backed by the {@code idx_sales_on_duty} partial index. */
-    List<AppUser> findByTownship_IdAndRoleAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
-            UUID townshipId, UserRole role);
+    List<AppUser> findByTownship_IdAndSalesTrueAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
+            UUID townshipId);
 
     /** Base for the per-unit resident login-id sequence. Counts inactive accounts too, deliberately:
      *  a deactivated {@code A-101-2} must not have its login id handed to a new resident.
@@ -130,6 +130,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
            """)
     List<UUID> findActiveUserIdsExcludingRoles(@Param("townshipId") UUID townshipId,
                                                @Param("roles") Collection<UserRole> roles);
+
+    /** The sales team: every active account carrying the sales flag, whatever its role. */
+    @Query("select u.id from AppUser u where u.active = true and u.township.id = :townshipId and u.sales = true")
+    List<UUID> findActiveSalesUserIds(@Param("townshipId") UUID townshipId);
 
     @Query("""
            select u.id from AppUser u

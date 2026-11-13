@@ -77,6 +77,29 @@ public class ExpirySweepJob {
                 notification.visitId(), notification.gateId(), notification.visitorName())));
     }
 
+    /**
+     * Marks every checked-in visitor now past their expected exit and raises the alert once per
+     * overstay. The stamp is what makes it once: a host who extends the stay clears it, so a second
+     * overstay of the same visit alerts again.
+     */
+    @Scheduled(cron = "30 * * * * *")
+    @SchedulerLock(name = "flagOverstays", lockAtMostFor = "PT2M", lockAtLeastFor = "PT10S")
+    @Transactional
+    public void flagOverstays() {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<VisitorLog> overstaying = visits.findNewlyOverstaying(VisitStatus.CHECKED_IN, now);
+        if (overstaying.isEmpty()) {
+            return;
+        }
+        List<UUID> ids = overstaying.stream().map(VisitorLog::getId).toList();
+        overstaying.forEach(visit -> visit.setOverstayAlertedAt(now));
+        visits.saveAll(overstaying);
+        audit.recordSystem(AuditAction.VISIT_OVERSTAY, "visitor_log", null,
+                AuditService.detail("count", ids.size()));
+        log.info("Flagged {} overstaying visit(s)", ids.size());
+        afterCommit.execute(() -> ids.forEach(notifier::overstay));
+    }
+
     @Scheduled(cron = "0 */5 * * * *")
     @SchedulerLock(name = "expirePasses", lockAtMostFor = "PT4M", lockAtLeastFor = "PT10S")
     @Transactional

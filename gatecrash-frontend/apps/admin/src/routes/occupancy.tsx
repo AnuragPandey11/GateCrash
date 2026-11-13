@@ -6,7 +6,7 @@ import {
   formatTime,
   type VisitorType,
 } from '@gatecrash/core';
-import { UsersRound } from 'lucide-react';
+import { DoorOpen, Home, UsersRound, type LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/app-shell';
@@ -40,33 +40,75 @@ function PropertyOccupancyCard() {
   const percent = Math.round(s.occupancyRate * 100);
 
   return (
-    <Card className="mb-4">
-      <CardContent className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <p className="text-3xl font-semibold tabular-nums text-text">{percent}%</p>
-          <p className="text-sm text-text-muted">{t('occupancy.summary.rate')}</p>
-          <p className="text-xs text-text-muted">
-            {t('occupancy.summary.occupiedUnits', {
-              occupied: s.occupiedUnits,
-              total: s.totalUnits,
-            })}
+    <div className="stagger mb-6 grid gap-4 md:grid-cols-3">
+      <StatTile
+        icon={Home}
+        value={`${percent}%`}
+        label={t('occupancy.summary.rate')}
+        detail={t('occupancy.summary.occupiedUnits', {
+          occupied: s.occupiedUnits,
+          total: s.totalUnits,
+        })}
+        progress={s.occupancyRate}
+      />
+      <StatTile
+        icon={UsersRound}
+        value={String(s.residentHeadcount)}
+        label={t('occupancy.summary.headcount')}
+        detail={
+          t('occupancy.summary.accounts', { count: s.registeredResidentAccounts }) +
+          (notReachable > 0 ? ` · ${t('occupancy.summary.accountsGap', { count: notReachable })}` : '')
+        }
+      />
+      <StatTile
+        icon={DoorOpen}
+        value={String(s.visitorsInside)}
+        label={t('occupancy.summary.visitorsInside')}
+        detail={t('occupancy.summary.visitorsHint')}
+      />
+    </div>
+  );
+}
+
+/**
+ * A headline number. Display serif for the figure, a quiet accent-ringed icon, and — where the
+ * number is a share of something — a slim progress hairline beneath it.
+ */
+function StatTile({
+  icon: Icon,
+  value,
+  label,
+  detail,
+  progress,
+}: {
+  icon: LucideIcon;
+  value: string;
+  label: string;
+  detail: string;
+  progress?: number;
+}) {
+  return (
+    <Card className="lift relative overflow-hidden">
+      <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-accent/10 blur-2xl" />
+      <CardContent className="relative space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-text-muted">
+            {label}
           </p>
+          <span className="flex size-9 items-center justify-center rounded-full border border-accent/30 bg-accent-soft text-accent">
+            <Icon className="size-4" aria-hidden />
+          </span>
         </div>
-        <div>
-          <p className="text-3xl font-semibold tabular-nums text-text">{s.residentHeadcount}</p>
-          <p className="text-sm text-text-muted">{t('occupancy.summary.headcount')}</p>
-          <p className="text-xs text-text-muted">
-            {t('occupancy.summary.accounts', { count: s.registeredResidentAccounts })}
-            {notReachable > 0
-              ? ` · ${t('occupancy.summary.accountsGap', { count: notReachable })}`
-              : ''}
-          </p>
-        </div>
-        <div>
-          <p className="text-3xl font-semibold tabular-nums text-text">{s.visitorsInside}</p>
-          <p className="text-sm text-text-muted">{t('occupancy.summary.visitorsInside')}</p>
-          <p className="text-xs text-text-muted">{t('occupancy.summary.visitorsHint')}</p>
-        </div>
+        <p className="font-display text-[2.5rem] leading-none tabular-nums text-text">{value}</p>
+        {progress !== undefined ? (
+          <div className="h-1 overflow-hidden rounded-full bg-surface-raised">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-accent/70 to-accent transition-[width] duration-1000 ease-out-expo"
+              style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
+            />
+          </div>
+        ) : null}
+        <p className="text-xs text-text-muted">{detail}</p>
       </CardContent>
     </Card>
   );
@@ -134,18 +176,19 @@ export function OccupancyRoute() {
 
   return (
     <>
-      <PageHeader title={t('occupancy.title')} description={t('occupancy.subtitle')} />
+      <PageHeader
+        eyebrow={t('pageEyebrow.overview')} title={t('occupancy.title')} description={t('occupancy.subtitle')} />
 
       <PropertyOccupancyCard />
 
-      <Card className="mb-4">
+      <Card className="mb-6">
         <CardContent className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="flex items-baseline gap-3">
             <p
               // `key` on the count makes React re-mount just this node so the pop animation
               // replays — without re-mounting the grid behind it.
               key={insideCount}
-              className="animate-count-pop text-3xl font-semibold tabular-nums text-text"
+              className="animate-count-pop font-display text-[2.5rem] leading-none tabular-nums text-text"
             >
               {insideCount}
             </p>
@@ -161,10 +204,10 @@ export function OccupancyRoute() {
                 aria-pressed={types.has(type)}
                 onClick={() => toggleType(type)}
                 className={cn(
-                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                  'rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all duration-200',
                   types.has(type)
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-text-muted hover:text-text',
+                    ? 'border-primary bg-primary text-primary-fg shadow-soft'
+                    : 'border-border text-text-muted hover:border-accent/50 hover:text-text',
                 )}
               >
                 {t(`status.visitorType.${type}`)}
@@ -175,7 +218,7 @@ export function OccupancyRoute() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('occupancy.searchPlaceholder')}
               aria-label={t('occupancy.searchPlaceholder')}
-              className="h-8 w-56"
+              className="h-9 w-60"
             />
           </div>
         </CardContent>
@@ -194,7 +237,7 @@ export function OccupancyRoute() {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {visits.map((visit) => (
             <VisitorCard key={visit.id} visit={visit} now={now} />
           ))}
@@ -209,10 +252,10 @@ function VisitorCard({ visit, now }: { visit: VisitResponse; now: Date }) {
   const destination = visit.targetFlatNumber ?? visit.approverName ?? '—';
 
   return (
-    <Card className="transition-colors hover:border-primary/40">
+    <Card className="lift hover:border-accent/40">
       <CardContent className="space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 truncate font-medium text-text" title={visit.visitorName}>
+          <p className="min-w-0 truncate font-semibold text-text" title={visit.visitorName}>
             {visit.visitorName}
           </p>
           <VisitorTypeBadge type={visit.visitorType} />

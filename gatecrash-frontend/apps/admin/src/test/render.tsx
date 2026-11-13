@@ -62,6 +62,7 @@ export const ADMIN_SESSION: MeResponse = {
   loginId: 'admin',
   fullName: 'Priya Nair',
   role: 'ADMIN',
+  sales: false,
   mustResetPassword: false,
   onDuty: false,
   flatId: null,

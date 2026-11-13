@@ -20,10 +20,16 @@ public enum VisitStatus {
     REJECTED,
     EXPIRED,
     CHECKED_IN,
-    CHECKED_OUT;
+    CHECKED_OUT,
+    /** "Leave at Gate": the courier did not come in; security holds the parcel (V7). */
+    LEFT_AT_GATE,
+    /** A resident showed the collection code and took the parcel. */
+    COLLECTED;
 
     private static final Map<VisitStatus, Set<VisitStatus>> TRANSITIONS = Map.of(
-            PENDING, EnumSet.of(APPROVED, REJECTED, EXPIRED),
+            PENDING, EnumSet.of(APPROVED, REJECTED, EXPIRED, LEFT_AT_GATE),
+            LEFT_AT_GATE, EnumSet.of(COLLECTED),
+            COLLECTED, EnumSet.noneOf(VisitStatus.class),
             // A pass redemption creates a visit directly in CHECKED_IN, so APPROVED -> CHECKED_IN is
             // the only forward edge here.
             APPROVED, EnumSet.of(CHECKED_IN, EXPIRED),

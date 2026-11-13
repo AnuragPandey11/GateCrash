@@ -1,7 +1,11 @@
 package com.gatecrash.visit;
 
 import com.gatecrash.config.AppProperties;
+import com.gatecrash.common.PageResponse;
+import com.gatecrash.visit.dto.VisitDtos.CollectParcelRequest;
+import com.gatecrash.visit.dto.VisitDtos.CollectionCodeResponse;
 import com.gatecrash.visit.dto.VisitDtos.CreateVisitRequest;
+import com.gatecrash.visit.dto.VisitDtos.ExtendStayRequest;
 import com.gatecrash.visit.dto.VisitDtos.VisitDecisionRequest;
 import com.gatecrash.visit.dto.VisitDtos.VisitResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +14,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,7 +55,7 @@ public class VisitController {
     @PatchMapping("/{id}/decision")
     @Operation(summary = "Approver accepts or rejects a pending visit")
     public VisitResponse decide(@PathVariable UUID id, @Valid @RequestBody VisitDecisionRequest request) {
-        return visits.decide(id, request.decision());
+        return visits.decide(id, request.decision(), request.expectedDurationMinutes());
     }
 
     @PatchMapping("/{id}/check-in")
@@ -62,6 +68,31 @@ public class VisitController {
     @Operation(summary = "Guard records exit")
     public VisitResponse checkOut(@PathVariable UUID id) {
         return visits.checkOut(id);
+    }
+
+    @GetMapping("/mine")
+    @Operation(summary = "The caller's visit history: their household's (resident) or their own (sales)")
+    public PageResponse<VisitResponse> mine(
+            @PageableDefault(size = 20) Pageable pageable) {
+        return visits.historyForCurrentUser(pageable);
+    }
+
+    @PatchMapping("/{id}/stay")
+    @Operation(summary = "Host extends an approved or checked-in visitor's stay; clears an overstay alert")
+    public VisitResponse extendStay(@PathVariable UUID id, @Valid @RequestBody ExtendStayRequest request) {
+        return visits.extendStay(id, request.extendMinutes());
+    }
+
+    @PostMapping("/{id}/collection-code")
+    @Operation(summary = "Resident gets a fresh collection code for a parcel left at the gate")
+    public CollectionCodeResponse collectionCode(@PathVariable UUID id) {
+        return visits.reissueCollectionCode(id);
+    }
+
+    @PostMapping("/{id}/collect")
+    @Operation(summary = "Guard hands over a parcel against the resident's collection code")
+    public VisitResponse collect(@PathVariable UUID id, @Valid @RequestBody CollectParcelRequest request) {
+        return visits.collectParcel(id, request.code());
     }
 
     @GetMapping("/pending")

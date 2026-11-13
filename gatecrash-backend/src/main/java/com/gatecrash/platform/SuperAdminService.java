@@ -115,7 +115,7 @@ public class SuperAdminService {
                 user.getId(), loginId, SecurityUtils.currentUserId());
 
         return new CreatedUserResponse(user.getId(), user.getLoginId(), user.getFullName(),
-                user.getRole(), null, generatedPassword);
+                user.getRole(), false, null, generatedPassword);
     }
 
     @PreAuthorize("hasRole('SUPER_ADMIN')")

@@ -14,6 +14,8 @@ import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.config.AppProperties;
 import com.gatecrash.device.DeviceService;
 import com.gatecrash.pass.dto.PassDtos.CreatePassRequest;
+import com.gatecrash.pass.dto.PassDtos.LookupPassRequest;
+import com.gatecrash.pass.dto.PassDtos.PassPreviewResponse;
 import com.gatecrash.pass.dto.PassDtos.CreatePassResponse;
 import com.gatecrash.pass.dto.PassDtos.PassResponse;
 import com.gatecrash.pass.dto.PassDtos.RedeemPassRequest;
@@ -108,11 +110,10 @@ public class PassService {
                 .orElseThrow(() -> NotFoundException.of("User", caller.getId()));
 
         OffsetDateTime now = OffsetDateTime.now();
-        validateWindow(request.validUntil(), now);
-        if (request.maxUses() > properties.pass().maxUsesLimit()) {
-            throw new BusinessValidationException("MAX_USES_EXCEEDED",
-                    "A pass may allow at most " + properties.pass().maxUsesLimit() + " entries.");
-        }
+        PassType type = request.passType() == null ? PassType.ONE_TIME : request.passType();
+        Window window = type == PassType.FREQUENT
+                ? frequentWindow(request, now)
+                : oneTimeWindow(request, now);
 
         String pin = passwordGenerator.generateNumericPin(properties.pass().pinLength());
 
@@ -121,28 +122,34 @@ public class PassService {
         // ever belong to the township of the person who minted it.
         pass.setTownship(creator.getTownship());
         pass.setCreatedBy(creator);
-        // Derived from the caller's role, never from the request body.
-        pass.setApproverKind(caller.getRole() == UserRole.SALES ? ApproverKind.SALES : ApproverKind.RESIDENT);
+        // Derived from the caller's account, never from the request body. A sales-team member's pass
+        // admits someone coming to meet them; anyone else's admits a guest of their unit.
+        pass.setApproverKind(caller.isSales() ? ApproverKind.SALES : ApproverKind.RESIDENT);
+        pass.setPassType(type);
         pass.setVisitorName(blankToNull(request.visitorName()));
         pass.setVisitorPhone(blankToNull(request.visitorPhone()));
         pass.setVisitorType(request.visitorType());
+        pass.setPurpose(blankToNull(request.purpose()));
+        pass.setVehicleNo(blankToNull(request.vehicleNo()));
+        pass.setExpectedArrivalAt(type == PassType.ONE_TIME ? window.arrival() : null);
+        pass.setExpectedDurationMinutes(request.expectedDurationMinutes());
         pass.setPinHash(passwordEncoder.encode(pin));
         pass.setPinLookup(pinHasher.lookupValue(pin));
         pass.setPinLast4(pin.substring(Math.max(0, pin.length() - 4)));
         pass.setQrToken(UUID.randomUUID());
         pass.setStatus(PassStatus.ACTIVE);
-        pass.setValidFrom(now);
-        pass.setValidUntil(request.validUntil());
-        pass.setMaxUses(request.maxUses());
+        pass.setValidFrom(window.from());
+        pass.setValidUntil(window.until());
+        pass.setMaxUses(window.maxUses());
         passes.save(pass);
 
         audit.record(AuditAction.PASS_CREATED, "pre_approval", pass.getId(),
-                AuditService.detail("visitorType", pass.getVisitorType(), "maxUses", pass.getMaxUses(),
-                        "validUntil", pass.getValidUntil()));
+                AuditService.detail("passType", type, "visitorType", pass.getVisitorType(),
+                        "maxUses", pass.getMaxUses(), "validUntil", pass.getValidUntil()));
         log.info("Pass {} minted by user {}", pass.getId(), caller.getId());
 
         // The only time the plaintext PIN leaves this method.
-        return new CreatePassResponse(pass.getId(), pin, pass.getQrToken(), pass.getValidFrom(),
+        return new CreatePassResponse(pass.getId(), type, pin, pass.getQrToken(), pass.getValidFrom(),
                 pass.getValidUntil(), pass.getMaxUses());
     }
 
@@ -172,6 +179,56 @@ public class PassService {
         passes.save(pass);
         audit.record(AuditAction.PASS_REVOKED, "pre_approval", passId, null);
         return toResponse(pass);
+    }
+
+    // ----- lookup -----------------------------------------------------------------------------
+
+    /**
+     * What the guard's scanner opens: the pass's details, pre-filled, without consuming it. Shares
+     * the redemption throttle, because a keypad that answered "that PIN exists" without one would be
+     * an oracle. An unknown code is the same not-found as at redemption.
+     */
+    @PreAuthorize("hasRole('GUARD')")
+    @Transactional(readOnly = true)
+    public PassPreviewResponse lookup(LookupPassRequest request) {
+        AppUserDetails guard = SecurityUtils.currentUser();
+        boolean byPin = request.pin() != null && !request.pin().isBlank();
+        boolean byQr = request.qrToken() != null;
+        if (byPin == byQr) {
+            throw new BusinessValidationException("AMBIGUOUS_REDEMPTION",
+                    "Supply exactly one of pin or qrToken.");
+        }
+        throttleRedemption(guard.getId());
+        Gate gate = township.requireGate(request.gateId());
+        UUID townshipId = gate.getTownshipId();
+
+        PreApproval pass = byQr
+                ? passes.findByQrTokenAndTownship_Id(request.qrToken(), townshipId)
+                        .orElseThrow(() -> new NotFoundException(REDEEM_FAILURE_MESSAGE))
+                : findByPinUnlocked(request.pin(), townshipId);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        boolean redeemable = pass.isRedeemableAt(now);
+        AppUser host = pass.getCreatedBy();
+        return new PassPreviewResponse(
+                pass.getId(),
+                pass.getPassType(),
+                pass.getVisitorName(),
+                pass.getVisitorPhone(),
+                pass.getVisitorType(),
+                pass.getPurpose(),
+                pass.getVehicleNo(),
+                host.getFullName(),
+                host.getUnit() == null ? null : host.getUnit().getCode(),
+                pass.getApproverKind() == ApproverKind.SALES,
+                pass.getExpectedArrivalAt(),
+                pass.getValidFrom(),
+                pass.getValidUntil(),
+                pass.getExpectedDurationMinutes(),
+                pass.getMaxUses(),
+                pass.getUseCount(),
+                redeemable,
+                redeemable ? null : reasonFor(pass, now));
     }
 
     // ----- redemption -------------------------------------------------------------------------
@@ -208,12 +265,12 @@ public class PassService {
         }
 
         pass.setUseCount(pass.getUseCount() + 1);
-        if (pass.getUseCount() >= pass.getMaxUses()) {
+        if (pass.getMaxUses() != null && pass.getUseCount() >= pass.getMaxUses()) {
             pass.setStatus(PassStatus.REDEEMED);
         }
         passes.save(pass);
 
-        VisitorLog visit = buildCheckedInVisit(pass, gate, guard.getId());
+        VisitorLog visit = buildCheckedInVisit(pass, gate, guard.getId(), request, now);
         visits.save(visit);
 
         audit.record(AuditAction.PASS_REDEEMED, "pre_approval", pass.getId(),
@@ -235,7 +292,7 @@ public class PassService {
         });
 
         return new RedeemPassResponse(pass.getId(), visitMapper.toResponse(visit),
-                Math.max(0, pass.getMaxUses() - pass.getUseCount()));
+                pass.getMaxUses() == null ? null : Math.max(0, pass.getMaxUses() - pass.getUseCount()));
     }
 
     private PreApproval resolveByQr(UUID qrToken, UUID townshipId) {
@@ -262,17 +319,37 @@ public class PassService {
         throw new NotFoundException(REDEEM_FAILURE_MESSAGE);
     }
 
-    private VisitorLog buildCheckedInVisit(PreApproval pass, Gate gate, UUID guardId) {
+    private VisitorLog buildCheckedInVisit(PreApproval pass, Gate gate, UUID guardId,
+                                           RedeemPassRequest corrections, OffsetDateTime now) {
         AppUser creator = pass.getCreatedBy();
         VisitorLog visit = new VisitorLog();
         visit.setTownship(gate.getTownship());
         visit.setGate(gate);
         visit.setLoggedBy(users.getReferenceById(guardId));
-        visit.setVisitorName(pass.getVisitorName() == null ? "Pass holder" : pass.getVisitorName());
-        visit.setVisitorPhone(pass.getVisitorPhone());
+        String name = firstNonBlank(corrections.visitorName(), pass.getVisitorName());
+        visit.setVisitorName(name == null ? "Pass holder" : name);
+        visit.setVisitorPhone(firstNonBlank(corrections.visitorPhone(), pass.getVisitorPhone()));
+        visit.setVehicleNo(firstNonBlank(corrections.vehicleNo(), pass.getVehicleNo()));
+        visit.setPurpose(firstNonBlank(corrections.purpose(), pass.getPurpose()));
+        // The exit the overstay alert measures: a one-time pass's out time, or -- for a frequent
+        // pass -- this visit's duration from now. The guard may correct the duration at the gate.
+        Integer duration = corrections.expectedDurationMinutes() != null
+                ? corrections.expectedDurationMinutes()
+                : pass.getExpectedDurationMinutes();
+        if (pass.getPassType() == PassType.ONE_TIME && corrections.expectedDurationMinutes() == null) {
+            visit.setExpectedOutAt(pass.getValidUntil());
+            visit.setExpectedDurationMinutes((int) Math.max(5,
+                    Math.min(10_080, Duration.between(now, pass.getValidUntil()).toMinutes())));
+        } else if (duration != null) {
+            visit.setExpectedDurationMinutes(duration);
+            visit.setExpectedOutAt(now.plusMinutes(duration));
+        }
         visit.setVisitorType(pass.getVisitorType());
         visit.setApprover(creator);
         visit.setApproverKind(pass.getApproverKind());
+        // A sales agent's pass admits someone coming to meet them -- the same fact the guard's
+        // tick-box records for a walk-in, and sales_meeting_routes_to_sales requires the two agree.
+        visit.setMeetSalesAgent(pass.getApproverKind() == ApproverKind.SALES);
         // Resident-minted passes carry the flat through so the visit shows up in the flat's history.
         visit.setTargetUnit(pass.getApproverKind() == ApproverKind.RESIDENT ? creator.getUnit() : null);
         visit.setPreApproval(pass);
@@ -292,18 +369,72 @@ public class PassService {
 
     // ----- guards -----------------------------------------------------------------------------
 
-    private void validateWindow(OffsetDateTime validUntil, OffsetDateTime now) {
-        Duration window = Duration.between(now, validUntil);
-        if (window.isNegative() || window.isZero()) {
-            throw new BusinessValidationException("INVALID_WINDOW",
-                    "validUntil must be in the future.");
+    /** The resolved validity of a pass being minted. {@code maxUses} null = unlimited. */
+    private record Window(OffsetDateTime arrival, OffsetDateTime from, OffsetDateTime until, Integer maxUses) {
+    }
+
+    /** How early before the expected arrival a one-time QR starts working. */
+    private static final Duration EARLY_ARRIVAL_GRACE = Duration.ofHours(1);
+    /** A one-time pass covers one visit; anything longer is a frequent pass. */
+    private static final Duration ONE_TIME_MAX_SPAN = Duration.ofHours(24);
+    /** The longest a frequent pass may run -- a term of tuition, a season of physiotherapy. */
+    private static final int FREQUENT_MAX_DAYS = 180;
+
+    private Window oneTimeWindow(CreatePassRequest request, OffsetDateTime now) {
+        OffsetDateTime arrival = request.validFrom() == null ? now : request.validFrom();
+        OffsetDateTime out = request.validUntil();
+        if (arrival.isBefore(now.minusMinutes(15))) {
+            throw new BusinessValidationException("INVALID_WINDOW", "The expected arrival is in the past.");
+        }
+        if (!out.isAfter(arrival) || !out.isAfter(now)) {
+            throw new BusinessValidationException("INVALID_WINDOW", "The out time must be after the arrival time.");
+        }
+        if (Duration.between(arrival, out).compareTo(ONE_TIME_MAX_SPAN) > 0) {
+            throw new BusinessValidationException("WINDOW_TOO_LONG",
+                    "A one-time pass covers at most 24 hours. Use a frequent pass for regular visits.");
         }
         long maxDays = properties.pass().maxValidityDays();
-        if (window.toDays() > maxDays) {
+        if (Duration.between(now, arrival).toDays() > maxDays) {
+            throw new BusinessValidationException("WINDOW_TOO_LONG",
+                    "A visit can be pre-approved at most " + maxDays + " days ahead.");
+        }
+        int maxUses = request.maxUses() == null ? 1 : request.maxUses();
+        if (maxUses > properties.pass().maxUsesLimit()) {
+            throw new BusinessValidationException("MAX_USES_EXCEEDED",
+                    "A pass may allow at most " + properties.pass().maxUsesLimit() + " entries.");
+        }
+        return new Window(arrival, arrival.minus(EARLY_ARRIVAL_GRACE), out, maxUses);
+    }
+
+    private Window frequentWindow(CreatePassRequest request, OffsetDateTime now) {
+        OffsetDateTime from = request.validFrom() == null ? now : request.validFrom();
+        OffsetDateTime until = request.validUntil();
+        if (!until.isAfter(from) || !until.isAfter(now)) {
+            throw new BusinessValidationException("INVALID_WINDOW", "The end date must be after the start date.");
+        }
+        if (Duration.between(from, until).toDays() > FREQUENT_MAX_DAYS) {
             // An indefinitely valid pass is a permanent key to the township.
             throw new BusinessValidationException("WINDOW_TOO_LONG",
-                    "A pass may be valid for at most " + maxDays + " days.");
+                    "A frequent pass may run for at most " + FREQUENT_MAX_DAYS + " days.");
         }
+        if (request.expectedDurationMinutes() == null) {
+            throw new BusinessValidationException("DURATION_REQUIRED",
+                    "Say how long each visit lasts, so an overstay can be noticed.");
+        }
+        return new Window(null, from, until, null);
+    }
+
+    private PreApproval findByPinUnlocked(String pin, UUID townshipId) {
+        for (PreApproval candidate : passes.findActiveByPinLookup(pinHasher.lookupValue(pin), townshipId)) {
+            if (passwordEncoder.matches(pin, candidate.getPinHash())) {
+                return candidate;
+            }
+        }
+        throw new NotFoundException(REDEEM_FAILURE_MESSAGE);
+    }
+
+    private static String firstNonBlank(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred.trim() : fallback;
     }
 
     private void throttleRedemption(UUID guardId) {
@@ -347,14 +478,19 @@ public class PassService {
     private PassResponse toResponse(PreApproval pass) {
         return new PassResponse(
                 pass.getId(),
+                pass.getPassType(),
                 pass.getVisitorName(),
                 pass.getVisitorPhone(),
                 pass.getVisitorType(),
+                pass.getPurpose(),
+                pass.getVehicleNo(),
                 pass.getStatus(),
                 pass.getPinLast4(),
                 pass.getQrToken(),
+                pass.getExpectedArrivalAt(),
                 pass.getValidFrom(),
                 pass.getValidUntil(),
+                pass.getExpectedDurationMinutes(),
                 pass.getMaxUses(),
                 pass.getUseCount(),
                 pass.getCreatedAt());

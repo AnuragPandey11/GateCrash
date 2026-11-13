@@ -83,6 +83,29 @@ class TenancyConstraintsTest extends AbstractIntegrationTest {
         assertThatCode(() -> insertUser("SUPER_ADMIN", "real-super", null)).doesNotThrowAnyException();
     }
 
+    // ----- the sales flag ----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("only ADMIN and GUARD accounts can carry the sales flag")
+    void salesIsAStaffCapability() {
+        assertThatThrownBy(() -> jdbc.update("UPDATE app_user SET is_sales = true WHERE id = ?",
+                alphaResident.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("sales_is_staff");
+
+        assertThatCode(() -> jdbc.update("UPDATE app_user SET is_sales = true WHERE id = ?",
+                alphaGuard.getId())).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("an account off the sales team cannot be on duty")
+    void onDutyRequiresSales() {
+        assertThatThrownBy(() -> jdbc.update("UPDATE app_user SET is_on_duty = true WHERE id = ?",
+                alphaGuard.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("on_duty_needs_sales");
+    }
+
     // ----- composite foreign keys ---------------------------------------------------------------
 
     @Test

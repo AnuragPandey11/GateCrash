@@ -9,6 +9,9 @@
 /** @param {string} v */
 const token = (v) => `hsl(var(${v}) / <alpha-value>)`;
 
+/** The one easing curve the product moves on: quick to start, long soft landing. */
+const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -31,31 +34,88 @@ export default {
           DEFAULT: token('--gc-primary'),
           fg: token('--gc-primary-fg'),
         },
+        accent: {
+          DEFAULT: token('--gc-accent'),
+          fg: token('--gc-accent-fg'),
+          soft: token('--gc-accent-soft'),
+        },
+        sidebar: {
+          DEFAULT: token('--gc-sidebar'),
+          fg: token('--gc-sidebar-fg'),
+          muted: token('--gc-sidebar-muted'),
+          border: token('--gc-sidebar-border'),
+          hover: token('--gc-sidebar-hover'),
+        },
         success: { DEFAULT: token('--gc-success'), fg: token('--gc-success-fg') },
         danger: { DEFAULT: token('--gc-danger'), fg: token('--gc-danger-fg') },
         warning: { DEFAULT: token('--gc-warning'), fg: token('--gc-warning-fg') },
         info: { DEFAULT: token('--gc-info'), fg: token('--gc-info-fg') },
         pending: { DEFAULT: token('--gc-pending'), fg: token('--gc-pending-fg') },
       },
+      fontFamily: {
+        // Manrope for everything a person reads at working size: open apertures, generous
+        // x-height, tabular figures. Playfair Display only at display sizes — page titles, the big
+        // numbers — where its high contrast reads as craft rather than strain.
+        sans: [
+          '"Manrope Variable"',
+          'Manrope',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          '"Segoe UI"',
+          'Roboto',
+          'sans-serif',
+        ],
+        display: ['"Playfair Display"', 'Georgia', '"Times New Roman"', 'serif'],
+      },
       borderRadius: {
         sm: 'var(--gc-radius-sm)',
         md: 'var(--gc-radius-md)',
         lg: 'var(--gc-radius-lg)',
       },
+      boxShadow: {
+        soft: 'var(--gc-shadow-soft)',
+        raised: 'var(--gc-shadow-raised)',
+        overlay: 'var(--gc-shadow-overlay)',
+      },
       fontSize: {
         // Type scale 12/14/16/20/24/32/48 (§10.1)
         xs: ['0.75rem', { lineHeight: '1rem' }],
-        sm: ['0.875rem', { lineHeight: '1.25rem' }],
+        sm: ['0.875rem', { lineHeight: '1.375rem' }],
         base: ['1rem', { lineHeight: '1.5rem' }],
         lg: ['1.25rem', { lineHeight: '1.75rem' }],
         xl: ['1.5rem', { lineHeight: '2rem' }],
-        '2xl': ['2rem', { lineHeight: '2.375rem' }],
-        '3xl': ['3rem', { lineHeight: '3.25rem' }],
+        '2xl': ['2rem', { lineHeight: '2.5rem', letterSpacing: '-0.01em' }],
+        '3xl': ['3rem', { lineHeight: '3.25rem', letterSpacing: '-0.015em' }],
+      },
+      transitionTimingFunction: {
+        'out-expo': EASE_OUT,
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'fade-out': { from: { opacity: '1' }, to: { opacity: '0' } },
+        enter: {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'scale-in': {
+          from: { opacity: '0', transform: 'translate(-50%, -48%) scale(0.96)' },
+          to: { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
+        },
+        'pop-in': {
+          from: { opacity: '0', transform: 'scale(0.96) translateY(-4px)' },
+          to: { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
         'slide-in-right': {
+          from: { opacity: '0', transform: 'translateX(24px) scale(0.98)' },
+          to: { opacity: '1', transform: 'translateX(0) scale(1)' },
+        },
+        'drawer-in': {
           from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'drawer-left': {
+          from: { transform: 'translateX(-100%)' },
           to: { transform: 'translateX(0)' },
         },
         'count-pop': {
@@ -63,11 +123,33 @@ export default {
           '40%': { transform: 'scale(1.08)' },
           '100%': { transform: 'scale(1)' },
         },
+        shimmer: {
+          from: { backgroundPosition: '-200% 0' },
+          to: { backgroundPosition: '200% 0' },
+        },
+        drift: {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '50%': { transform: 'translate3d(4%, -3%, 0) scale(1.08)' },
+        },
+        'pulse-ring': {
+          '0%': { boxShadow: '0 0 0 0 currentColor' },
+          '70%': { boxShadow: '0 0 0 6px transparent' },
+          '100%': { boxShadow: '0 0 0 0 transparent' },
+        },
       },
       animation: {
-        'fade-in': 'fade-in 150ms ease-out',
-        'slide-in-right': 'slide-in-right 200ms cubic-bezier(0.32, 0.72, 0, 1)',
+        'fade-in': `fade-in 200ms ${EASE_OUT}`,
+        'fade-out': `fade-out 150ms ease-in`,
+        enter: `enter 420ms ${EASE_OUT} both`,
+        'scale-in': `scale-in 260ms ${EASE_OUT}`,
+        'pop-in': `pop-in 180ms ${EASE_OUT}`,
+        'slide-in-right': `slide-in-right 360ms ${EASE_OUT}`,
+        'drawer-in': `drawer-in 380ms ${EASE_OUT}`,
+        'drawer-left': `drawer-left 320ms ${EASE_OUT}`,
         'count-pop': 'count-pop 420ms ease-out',
+        shimmer: 'shimmer 1.8s linear infinite',
+        drift: 'drift 18s ease-in-out infinite',
+        'pulse-ring': 'pulse-ring 2s ease-out infinite',
       },
     },
   },

@@ -176,11 +176,12 @@ class VisitFsmTest extends AbstractIntegrationTest {
     // ----- routing rules ----------------------------------------------------------------------
 
     @Test
-    @DisplayName("a CLIENT visit without a sales agent is unprocessable")
-    void clientVisitRequiresSalesAgent() throws Exception {
+    @DisplayName("a meet-sales-agent visit without a sales agent is unprocessable")
+    void salesMeetingRequiresSalesAgent() throws Exception {
         Map<String, Object> request = new HashMap<>();
         request.put("gateId", gate.getId().toString());
-        request.put("visitorType", "CLIENT");
+        request.put("visitorType", "GUEST");
+        request.put("meetSalesAgent", true);
         request.put("visitorName", "Prospective Buyer");
 
         mockMvc.perform(post("/api/v1/visits")
@@ -192,11 +193,12 @@ class VisitFsmTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("a CLIENT visit routes to the chosen on-duty sales agent")
-    void clientVisitRoutesToSales() throws Exception {
+    @DisplayName("a meet-sales-agent visit routes to the chosen on-duty sales agent")
+    void salesMeetingRoutesToSales() throws Exception {
         Map<String, Object> request = new HashMap<>();
         request.put("gateId", gate.getId().toString());
-        request.put("visitorType", "CLIENT");
+        request.put("visitorType", "GUEST");
+        request.put("meetSalesAgent", true);
         request.put("visitorName", "Prospective Buyer");
         request.put("salesAgentId", salesOnDuty.getId().toString());
 
@@ -206,6 +208,7 @@ class VisitFsmTest extends AbstractIntegrationTest {
                         .content(json(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.approverKind").value("SALES"))
+                .andExpect(jsonPath("$.meetSalesAgent").value(true))
                 .andReturn().getResponse().getContentAsString();
 
         UUID visitId = UUID.fromString(objectMapper.readTree(body).get("id").asText());
@@ -218,7 +221,8 @@ class VisitFsmTest extends AbstractIntegrationTest {
         AppUser offDuty = data.salesAgent(false);
         Map<String, Object> request = new HashMap<>();
         request.put("gateId", gate.getId().toString());
-        request.put("visitorType", "CLIENT");
+        request.put("visitorType", "GUEST");
+        request.put("meetSalesAgent", true);
         request.put("visitorName", "Prospective Buyer");
         request.put("salesAgentId", offDuty.getId().toString());
 
@@ -228,6 +232,24 @@ class VisitFsmTest extends AbstractIntegrationTest {
                         .content(json(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("AGENT_OFF_DUTY"));
+    }
+
+    @Test
+    @DisplayName("an account without the sales flag cannot be the sales routing target")
+    void nonSalesAccountIsNotASalesAgent() throws Exception {
+        Map<String, Object> request = new HashMap<>();
+        request.put("gateId", gate.getId().toString());
+        request.put("visitorType", "GUEST");
+        request.put("meetSalesAgent", true);
+        request.put("visitorName", "Prospective Buyer");
+        request.put("salesAgentId", guard.getId().toString());
+
+        mockMvc.perform(post("/api/v1/visits")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(request)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NOT_A_SALES_AGENT"));
     }
 
     @Test

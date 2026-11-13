@@ -107,6 +107,42 @@ class UserProvisioningTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("a guard can be provisioned onto the sales team")
+    void guardCanBeProvisionedAsSales() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("role", "GUARD", "loginId", "sales-agent-9",
+                                "fullName", "Sales Agent", "sales", true))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("GUARD"))
+                .andExpect(jsonPath("$.sales").value(true));
+    }
+
+    @Test
+    @DisplayName("a resident cannot be marked as sales")
+    void residentCannotBeSales() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("role", "RESIDENT", "flatId", flat.getId().toString(),
+                                "fullName", "Resident Seller", "sales", true))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("SALES_NOT_ALLOWED_FOR_ROLE"));
+    }
+
+    @Test
+    @DisplayName("a SALES role no longer exists")
+    void salesRoleIsGone() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("role", "SALES", "loginId", "old-sales",
+                                "fullName", "Old Style"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("a duplicate staff login id is a conflict, not a second account")
     void duplicateStaffLoginIdConflicts() throws Exception {
         Map<String, Object> request = Map.of("role", "GUARD", "loginId", "gate-staff-1",

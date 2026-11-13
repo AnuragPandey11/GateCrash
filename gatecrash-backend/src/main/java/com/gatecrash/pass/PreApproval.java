@@ -99,8 +99,28 @@ public class PreApproval {
     @Column(name = "valid_until", nullable = false)
     private OffsetDateTime validUntil;
 
-    @Column(name = "max_uses", nullable = false)
-    private int maxUses = 1;
+    /** Null for a frequent pass: unlimited entries inside the window (frequent_is_unlimited). */
+    @Column(name = "max_uses")
+    private Integer maxUses = 1;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "pass_type", nullable = false, columnDefinition = "pass_type")
+    private PassType passType = PassType.ONE_TIME;
+
+    @Column(name = "purpose")
+    private String purpose;
+
+    @Column(name = "vehicle_no")
+    private String vehicleNo;
+
+    /** One-time passes: when the resident expects the guest. Shown to the guard on scan. */
+    @Column(name = "expected_arrival_at")
+    private OffsetDateTime expectedArrivalAt;
+
+    /** How long each visit lasts. Required for a frequent pass; it sets each visit's exit time. */
+    @Column(name = "expected_duration_minutes")
+    private Integer expectedDurationMinutes;
 
     @Column(name = "use_count", nullable = false)
     private int useCount = 0;
@@ -118,7 +138,7 @@ public class PreApproval {
         return status == PassStatus.ACTIVE
                 && !now.isBefore(validFrom)
                 && now.isBefore(validUntil)
-                && useCount < maxUses;
+                && (maxUses == null || useCount < maxUses);
     }
 
     public UUID getTownshipId() {

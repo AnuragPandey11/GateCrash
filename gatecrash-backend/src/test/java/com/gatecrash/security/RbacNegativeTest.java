@@ -192,6 +192,7 @@ class RbacNegativeTest extends AbstractIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("visitorType", "GUEST", "maxUses", 1,
+                                "visitorName", "Guest", "visitorPhone", "+919811122233",
                                 "validUntil", java.time.OffsetDateTime.now().plusHours(4).toString()))))
                 .andExpect(status().isForbidden());
     }
@@ -206,6 +207,26 @@ class RbacNegativeTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("onDuty", true))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("a guard without the sales flag cannot flip the duty toggle")
+    void plainGuardCannotToggleDuty() throws Exception {
+        mockMvc.perform(patch("/api/v1/sales/me/duty")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("onDuty", true))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("a guard with the sales flag can flip the duty toggle")
+    void salesFlaggedGuardCanToggleDuty() throws Exception {
+        mockMvc.perform(patch("/api/v1/sales/me/duty")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(sales))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("onDuty", false))))
+                .andExpect(status().isOk());
     }
 
     @Test

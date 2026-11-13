@@ -48,8 +48,9 @@ public class AdminVisitService {
 
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
-    public PageResponse<VisitResponse> search(VisitStatus status, VisitorType visitorType, UUID gateId,
-                                              UUID flatId, OffsetDateTime from, OffsetDateTime to,
+    public PageResponse<VisitResponse> search(VisitStatus status, VisitorType visitorType,
+                                              Boolean meetSalesAgent, UUID gateId, UUID flatId,
+                                              OffsetDateTime from, OffsetDateTime to,
                                               Pageable pageable) {
         UUID townshipId = TenantContext.requireTownshipId();
         Specification<VisitorLog> specification = (root, query, builder) -> {
@@ -61,11 +62,14 @@ public class AdminVisitService {
             if (visitorType != null) {
                 predicates.add(builder.equal(root.get("visitorType"), visitorType));
             }
+            if (meetSalesAgent != null) {
+                predicates.add(builder.equal(root.get("meetSalesAgent"), meetSalesAgent));
+            }
             if (gateId != null) {
                 predicates.add(builder.equal(root.get("gate").get("id"), gateId));
             }
             if (flatId != null) {
-                predicates.add(builder.equal(root.get("targetFlat").get("id"), flatId));
+                predicates.add(builder.equal(root.get("targetUnit").get("id"), flatId));
             }
             if (from != null) {
                 predicates.add(builder.greaterThanOrEqualTo(root.get("createdAt"), from));

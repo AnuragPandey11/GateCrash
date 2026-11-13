@@ -4,6 +4,11 @@ import { App } from './app';
 import './lib/i18n';
 import { bootstrapSession } from './lib/session';
 import { initTheme } from './lib/theme';
+// Self-hosted type: no request to a font CDN, nothing for a CSP to block, works offline.
+import '@fontsource-variable/manrope';
+import '@fontsource/playfair-display/500.css';
+import '@fontsource/playfair-display/600.css';
+import '@fontsource/playfair-display/700.css';
 import './styles/index.css';
 
 // Before first paint, so there is no flash of the wrong theme.

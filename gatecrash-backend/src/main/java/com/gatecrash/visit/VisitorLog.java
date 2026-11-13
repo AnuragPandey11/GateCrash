@@ -82,6 +82,47 @@ public class VisitorLog {
     private String vehicleNo;
 
     /**
+     * The "Meet Sales Agent" tick-box: this visitor came to see the sales team. Orthogonal to
+     * {@link #visitorType} -- a prospect is a GUEST who wants to meet sales -- and tied to routing
+     * by the {@code sales_meeting_routes_to_sales} check: true exactly when the visit is routed to a
+     * sales agent.
+     */
+    @Column(name = "meet_sales_agent", nullable = false)
+    private boolean meetSalesAgent = false;
+
+    @Column(name = "purpose")
+    private String purpose;
+
+    /**
+     * How long the visitor expects to stay, set by the guard at the gate or by the resident when
+     * approving (or by the pass). Drives {@link #expectedOutAt}, and so the overstay alert.
+     */
+    @Column(name = "expected_duration_minutes")
+    private Integer expectedDurationMinutes;
+
+    /** Set at check-in from the duration, or from a one-time pass's out time; extendable. */
+    @Column(name = "expected_out_at")
+    private OffsetDateTime expectedOutAt;
+
+    /** When the overstay alert fired. Cleared when the stay is extended, so it can fire again. */
+    @Column(name = "overstay_alerted_at")
+    private OffsetDateTime overstayAlertedAt;
+
+    /**
+     * Peppered HMAC of the Leave-at-Gate collection code -- the same scheme as pass PINs, so the
+     * plaintext is never stored. Regenerating the code replaces it.
+     */
+    @Column(name = "collection_code_lookup")
+    private String collectionCodeLookup;
+
+    @Column(name = "collected_at")
+    private OffsetDateTime collectedAt;
+
+    /** The society rule that approved this walk-in on arrival, if one did (V10). */
+    @Column(name = "entry_rule_id")
+    private UUID entryRuleId;
+
+    /**
      * The routed decision-maker. For resident routing this is one nominated account on the flat --
      * any active resident of {@link #targetUnit} may decide, so ownership is checked against the flat,
      * not against this id.

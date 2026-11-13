@@ -1,5 +1,5 @@
 import type { AudienceMode, UserRole } from './enums';
-import type { BlockId, FlatId } from './ids';
+import type { BlockId, FlatId, PropertyNodeId } from './ids';
 
 /**
  * The notification targeting rule — mirrors `NotificationDtos.AudienceRule`.
@@ -14,6 +14,11 @@ export interface AudienceRule {
   roles?: UserRole[] | null;
   flatIds?: FlatId[] | null;
   blockIds?: BlockId[] | null;
+  /**
+   * NODES: any mix of property nodes at any level, each meaning "every resident beneath it". The
+   * drill-down picker sends the most compact form — a whole tower as one id, not its 200 flats.
+   */
+  nodeIds?: PropertyNodeId[] | null;
 }
 
 /** Backend `@Size` caps on the rule's lists (§4.7). */
@@ -21,7 +26,11 @@ export const AUDIENCE_LIMITS = {
   roles: 4,
   flatIds: 2000,
   blockIds: 200,
+  nodeIds: 2000,
 } as const;
+
+/** The modes the composer offers, in the order it offers them. */
+export const COMPOSER_AUDIENCE_MODES = ['ALL', 'NODES', 'ROLES', 'SALES_TEAM'] as const satisfies readonly AudienceMode[];
 
 /**
  * Build the request body for one mode, carrying *only* the list that mode uses.
@@ -42,6 +51,10 @@ export function buildAudienceRule(draft: AudienceRule): AudienceRule {
       return { mode: 'FLATS', flatIds: draft.flatIds ?? [] };
     case 'BLOCKS':
       return { mode: 'BLOCKS', blockIds: draft.blockIds ?? [] };
+    case 'NODES':
+      return { mode: 'NODES', nodeIds: draft.nodeIds ?? [] };
+    case 'SALES_TEAM':
+      return { mode: 'SALES_TEAM' };
   }
 }
 
@@ -51,13 +64,22 @@ export type AudienceRuleError =
   | 'FLATS_REQUIRED'
   | 'FLATS_TOO_MANY'
   | 'BLOCKS_REQUIRED'
-  | 'BLOCKS_TOO_MANY';
+  | 'BLOCKS_TOO_MANY'
+  | 'NODES_REQUIRED'
+  | 'NODES_TOO_MANY';
 
 /** Null when the rule is sendable; otherwise the reason, for an inline message on the builder. */
 export function validateAudienceRule(rule: AudienceRule): AudienceRuleError | null {
   switch (rule.mode) {
     case 'ALL':
+    case 'SALES_TEAM':
       return null;
+    case 'NODES': {
+      const nodes = rule.nodeIds ?? [];
+      if (nodes.length === 0) return 'NODES_REQUIRED';
+      if (nodes.length > AUDIENCE_LIMITS.nodeIds) return 'NODES_TOO_MANY';
+      return null;
+    }
     case 'ALL_EXCEPT':
     case 'ROLES': {
       const roles = rule.roles ?? [];
@@ -92,6 +114,7 @@ export function audienceRuleKey(rule: AudienceRule): string {
   if (normalised.roles) parts.push(`r:${[...normalised.roles].sort().join(',')}`);
   if (normalised.flatIds) parts.push(`f:${[...normalised.flatIds].sort().join(',')}`);
   if (normalised.blockIds) parts.push(`b:${[...normalised.blockIds].sort().join(',')}`);
+  if (normalised.nodeIds) parts.push(`n:${[...normalised.nodeIds].sort().join(',')}`);
   return parts.join('|');
 }
 
@@ -102,7 +125,11 @@ export function audienceRuleKey(rule: AudienceRule): string {
  */
 export function describeAudienceRule(
   rule: AudienceRule,
-  lookup?: { flat?: (id: FlatId) => string | undefined; block?: (id: BlockId) => string | undefined },
+  lookup?: {
+    flat?: (id: FlatId) => string | undefined;
+    block?: (id: BlockId) => string | undefined;
+    node?: (id: PropertyNodeId) => string | undefined;
+  },
 ): string {
   const names = <T extends string>(ids: T[], resolve?: (id: T) => string | undefined, noun = 'item') => {
     const resolved = ids.map((id) => resolve?.(id)).filter((n): n is string => Boolean(n));
@@ -122,5 +149,9 @@ export function describeAudienceRule(
       return `Flats: ${names(rule.flatIds ?? [], lookup?.flat, 'flat')}`;
     case 'BLOCKS':
       return `Blocks: ${names(rule.blockIds ?? [], lookup?.block, 'block')}`;
+    case 'NODES':
+      return names(rule.nodeIds ?? [], lookup?.node, 'location');
+    case 'SALES_TEAM':
+      return 'Sales team';
   }
 }

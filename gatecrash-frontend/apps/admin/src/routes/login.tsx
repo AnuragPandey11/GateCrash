@@ -1,7 +1,7 @@
 import { isApiException, loginRequestSchema, type LoginRequest } from '@gatecrash/api';
 import { CLIENT_LIMITS } from '@gatecrash/core';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2 } from 'lucide-react';
+import { BellRing, Building2, Loader2, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -73,79 +73,140 @@ export function LoginRoute() {
   const submitting = form.formState.isSubmitting;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="space-y-1 text-center">
-          <h1 className="text-xl font-semibold text-text">{t('common.appName')}</h1>
-          <p className="text-sm text-text-muted">{t('login.subtitle')}</p>
+    <div className="grid min-h-screen bg-bg lg:grid-cols-[1.1fr_1fr]">
+      {/* The brand panel. Decorative and informational only — nothing here is interactive, so a
+          keyboard user lands straight in the form. */}
+      <aside
+        aria-hidden
+        className="midnight-panel relative hidden overflow-hidden text-sidebar-fg lg:flex lg:flex-col lg:justify-between lg:p-14"
+      >
+        <div className="pointer-events-none absolute -left-24 -top-24 size-[28rem] rounded-full bg-accent/20 blur-3xl animate-drift" />
+        <div
+          className="pointer-events-none absolute -bottom-32 right-0 size-[30rem] rounded-full bg-[hsl(224_70%_45%/0.25)] blur-3xl animate-drift"
+          style={{ animationDelay: '-9s' }}
+        />
+
+        <div className="relative flex items-center gap-3 animate-enter">
+          <span className="flex size-11 items-center justify-center rounded-[12px] border border-accent/50 bg-accent/10 font-display text-2xl text-accent">
+            G
+          </span>
+          <div className="leading-tight">
+            <p className="font-display text-2xl">{t('common.appName')}</p>
+            <p className="text-[0.625rem] font-semibold uppercase tracking-[0.24em] text-sidebar-muted">
+              {t('nav.tagline')}
+            </p>
+          </div>
         </div>
 
-        <form
-          onSubmit={onSubmit}
-          className="space-y-4 rounded-lg border border-border bg-surface p-6"
-          noValidate
-        >
-          <h2 className="font-medium text-text">{t('login.title')}</h2>
+        <div className="relative max-w-lg space-y-8">
+          <div className="space-y-5 animate-enter [animation-delay:120ms]">
+            <p className="eyebrow">{t('login.heroEyebrow')}</p>
+            <h2 className="font-display text-[2.75rem] leading-[1.08] text-sidebar-fg">
+              {t('login.heroTitle')}
+            </h2>
+            <p className="text-[0.9375rem] leading-relaxed text-sidebar-muted">{t('login.heroBody')}</p>
+          </div>
+          <ul className="stagger space-y-3.5">
+            {(
+              [
+                [ShieldCheck, 'login.heroPoint1'],
+                [BellRing, 'login.heroPoint2'],
+                [Building2, 'login.heroPoint3'],
+              ] as const
+            ).map(([Icon, key]) => (
+              <li key={key} className="flex items-center gap-3 text-sm text-sidebar-fg/90">
+                <span className="flex size-8 items-center justify-center rounded-full border border-accent/30 bg-accent/10">
+                  <Icon className="size-4 text-accent" />
+                </span>
+                {t(key)}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          {endedReason && !formError ? (
-            <p className="rounded-md bg-surface-raised px-3 py-2 text-sm text-text-muted">
-              {t('errors.UNAUTHORIZED')}
-            </p>
-          ) : null}
+        <p className="relative text-xs text-sidebar-muted/80">{t('login.heroFooter')}</p>
+      </aside>
 
-          {formError ? (
-            <p role="alert" className="rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">
-              {formError}
-            </p>
-          ) : null}
+      <div className="flex items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-[25rem] space-y-8 animate-enter">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 lg:hidden">
+              <span className="flex size-10 items-center justify-center rounded-[12px] border border-accent/50 bg-accent/10 font-display text-xl text-accent">
+                G
+              </span>
+              <span className="font-display text-2xl text-text">{t('common.appName')}</span>
+            </div>
+            <p className="eyebrow">{t('login.eyebrow')}</p>
+            <h1 className="font-display text-[2.25rem] leading-tight text-text">{t('login.title')}</h1>
+            <p className="text-sm text-text-muted">{t('login.subtitle')}</p>
+          </div>
 
-          <Field
-            label={t('login.townshipCode')}
-            hint={t('login.townshipCodeHint')}
-            error={form.formState.errors.townshipCode?.message}
-          >
-            {(props) => (
-              <Input
-                {...props}
-                {...form.register('townshipCode')}
-                autoComplete="organization"
-                autoFocus
-                spellCheck={false}
-                autoCapitalize="characters"
-                className="uppercase"
-              />
-            )}
-          </Field>
+          <form onSubmit={onSubmit} className="space-y-5" noValidate>
+            {endedReason && !formError ? (
+              <p className="rounded-[10px] border border-border bg-surface-raised px-3.5 py-2.5 text-sm text-text-muted animate-pop-in">
+                {t('errors.UNAUTHORIZED')}
+              </p>
+            ) : null}
 
-          <Field label={t('login.loginId')} error={form.formState.errors.loginId?.message} required>
-            {(props) => (
-              <Input
-                {...props}
-                {...form.register('loginId')}
-                autoComplete="username"
-                spellCheck={false}
-                autoCapitalize="none"
-              />
-            )}
-          </Field>
+            {formError ? (
+              <p
+                role="alert"
+                className="rounded-[10px] border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-sm text-danger animate-pop-in"
+              >
+                {formError}
+              </p>
+            ) : null}
 
-          <Field label={t('login.password')} error={form.formState.errors.password?.message} required>
-            {(props) => (
-              <PasswordInput
-                {...props}
-                {...form.register('password')}
-                autoComplete="current-password"
-              />
-            )}
-          </Field>
+            <Field
+              label={t('login.townshipCode')}
+              hint={t('login.townshipCodeHint')}
+              error={form.formState.errors.townshipCode?.message}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  {...form.register('townshipCode')}
+                  autoComplete="organization"
+                  autoFocus
+                  spellCheck={false}
+                  autoCapitalize="characters"
+                  className="h-11 uppercase tracking-[0.12em]"
+                />
+              )}
+            </Field>
 
-          <Button type="submit" className="w-full" disabled={submitting || lockedOut}>
-            {submitting ? <Loader2 className="animate-spin" aria-hidden /> : null}
-            {submitting ? t('login.submitting') : t('login.submit')}
-          </Button>
+            <Field label={t('login.loginId')} error={form.formState.errors.loginId?.message} required>
+              {(props) => (
+                <Input
+                  {...props}
+                  {...form.register('loginId')}
+                  autoComplete="username"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  className="h-11"
+                />
+              )}
+            </Field>
 
-          <p className="text-center text-xs text-text-muted">{t('login.noSignup')}</p>
-        </form>
+            <Field label={t('login.password')} error={form.formState.errors.password?.message} required>
+              {(props) => (
+                <PasswordInput
+                  {...props}
+                  {...form.register('password')}
+                  autoComplete="current-password"
+                />
+              )}
+            </Field>
+
+            <Button type="submit" size="lg" className="w-full" disabled={submitting || lockedOut}>
+              {submitting ? <Loader2 className="animate-spin" aria-hidden /> : null}
+              {submitting ? t('login.submitting') : t('login.submit')}
+            </Button>
+
+            <div className="accent-rule opacity-40" />
+            <p className="text-center text-xs leading-relaxed text-text-muted">{t('login.noSignup')}</p>
+          </form>
+        </div>
       </div>
     </div>
   );

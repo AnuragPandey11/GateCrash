@@ -118,6 +118,13 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
 
     // ── Visits ──────────────────────────────────────────────────────────────────────────────
     http.get(url('/visits/pending', base), () => HttpResponse.json([pendingVisitFixture])),
+    http.get(url('/visits/mine', base), () => HttpResponse.json(page([], { size: 20 }))),
+    http.get(url('/move-requests/today', base), () => HttpResponse.json([])),
+    http.get(url('/amenities', base), () => HttpResponse.json([])),
+    http.get(url('/amenity-bookings/mine', base), () => HttpResponse.json([])),
+    http.get(url('/support-tickets/mine', base), () => HttpResponse.json(page([], { size: 20 }))),
+    http.get(url('/invoices/mine', base), () => HttpResponse.json(page([], { size: 20 }))),
+    http.get(url('/move-requests/mine', base), () => HttpResponse.json([])),
     http.get(url('/visits/gate/:gateId', base), () =>
       HttpResponse.json([insideVisitFixture, pendingVisitFixture]),
     ),

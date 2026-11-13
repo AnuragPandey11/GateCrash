@@ -257,6 +257,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
         request.put("gateId", betaGate.getId().toString());
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Trespasser");
+        request.put("visitorPhone", "+919811122233");
         request.put("targetFlatId", alphaFlat.getId().toString());
 
         mockMvc.perform(post("/api/v1/visits")
@@ -273,6 +274,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
         request.put("gateId", alphaGate.getId().toString());
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Misrouted");
+        request.put("visitorPhone", "+919811122233");
         request.put("targetFlatId", betaFlat.getId().toString());
 
         mockMvc.perform(post("/api/v1/visits")
@@ -443,6 +445,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
         request.put("gateId", gate.getId().toString());
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Ravi Kumar");
+        request.put("visitorPhone", "+919811122233");
         request.put("targetFlatId", flat.getId().toString());
 
         String body = mockMvc.perform(post("/api/v1/visits")
@@ -467,6 +470,7 @@ class MultiTenancyTest extends AbstractIntegrationTest {
         Map<String, Object> request = new HashMap<>();
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Expected Guest");
+        request.put("visitorPhone", "+919811122233");
         request.put("maxUses", 1);
         request.put("validUntil", OffsetDateTime.now().plusHours(4).toString());
         return request;

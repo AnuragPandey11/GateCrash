@@ -66,6 +66,32 @@ export function createFrameDispatcher(qc: QueryClient, options: DispatcherOption
         void qc.invalidateQueries({ queryKey: qk.inbox.all });
         break;
       }
+
+      case 'OVERSTAY_ALERT':
+      case 'VISIT_EXTENDED': {
+        // The gate feed and the household history both show the overstay flag and exit time.
+        void qc.invalidateQueries({ queryKey: qk.visits.all });
+        void qc.invalidateQueries({ queryKey: qk.admin.inside });
+        break;
+      }
+
+      case 'SERVICE_UPDATE': {
+        // Keys from `service-hooks.ts` — the first segment is enough to refresh every page of them.
+        // RULE/STAFF roots come from `rules-staff-hooks.ts`; a VISIT update is a walk-in a society
+        // rule let in, which belongs in the household's history.
+        const root = (
+          {
+            TICKET: 'tickets',
+            MOVE: 'moves',
+            BOOKING: 'bookings',
+            RULE: 'rules',
+            STAFF: 'staff',
+            VISIT: 'visits',
+          } as Record<string, string | undefined>
+        )[frame.kind];
+        if (root) void qc.invalidateQueries({ queryKey: [root] });
+        break;
+      }
     }
 
     options.onEvent?.(frame);

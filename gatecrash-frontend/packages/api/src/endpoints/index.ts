@@ -6,7 +6,9 @@ import { notificationEndpoints } from './notifications';
 import { passEndpoints } from './passes';
 import { platformEndpoints } from './platform';
 import { propertyEndpoints } from './property';
+import { rulesEndpoints, staffEndpoints } from './rules-staff';
 import { salesEndpoints } from './sales';
+import { serviceEndpoints } from './services';
 import { townshipEndpoints } from './township';
 import { adminUserEndpoints } from './users';
 import { adminVisitEndpoints, visitEndpoints } from './visits';
@@ -33,6 +35,11 @@ export function createEndpoints(client: ApiClient) {
     // SUPER_ADMIN only. Present on every client because the role is decided at runtime; every one
     // of these answers 403 for anyone else, which is the check that counts.
     platform: platformEndpoints(client),
+    // Help desk, amenities, moves and bills (V8).
+    services: serviceEndpoints(client),
+    // Society rules (V10) and daily help & staff (V11).
+    rules: rulesEndpoints(client),
+    staff: staffEndpoints(client),
   };
 }
 
@@ -46,9 +53,16 @@ export {
   passEndpoints,
   platformEndpoints,
   propertyEndpoints,
+  rulesEndpoints,
   salesEndpoints,
+  staffEndpoints,
+  serviceEndpoints,
   townshipEndpoints,
   adminUserEndpoints,
   adminVisitEndpoints,
   visitEndpoints,
 };
+
+export * from './services';
+export * from './rules-staff';
+export type { RedeemCorrections } from './passes';

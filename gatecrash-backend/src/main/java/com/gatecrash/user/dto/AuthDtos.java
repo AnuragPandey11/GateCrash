@@ -38,6 +38,7 @@ public final class AuthDtos {
             long expiresInSeconds,
             boolean mustResetPassword,
             UserRole role,
+            boolean sales,
             UUID userId,
             String fullName,
             /** Null for a SUPER_ADMIN; the tenant every other session is bound to. */
@@ -63,6 +64,7 @@ public final class AuthDtos {
             String loginId,
             String fullName,
             UserRole role,
+            boolean sales,
             boolean mustResetPassword,
             boolean onDuty,
             UUID flatId,

@@ -58,6 +58,18 @@ export const VISIT_STATUS_META: Record<VisitStatus, StatusMeta> = {
     tone: 'muted',
     icon: 'log-out',
   },
+  LEFT_AT_GATE: {
+    label: 'Parcel at gate',
+    labelKey: 'status.visit.LEFT_AT_GATE',
+    tone: 'warning',
+    icon: 'package',
+  },
+  COLLECTED: {
+    label: 'Parcel collected',
+    labelKey: 'status.visit.COLLECTED',
+    tone: 'muted',
+    icon: 'ticket-check',
+  },
 };
 
 export const PASS_STATUS_META: Record<PassStatus, StatusMeta> = {
@@ -81,12 +93,14 @@ export const VISITOR_TYPE_META: Record<VisitorType, StatusMeta> = {
     tone: 'muted',
     icon: 'wrench',
   },
-  CLIENT: {
-    label: 'Client',
-    labelKey: 'status.visitorType.CLIENT',
-    tone: 'primary',
-    icon: 'briefcase',
-  },
+};
+
+/** The sales-team badge — a flag on an ADMIN or GUARD account, shown beside the role. */
+export const SALES_META: StatusMeta = {
+  label: 'Sales',
+  labelKey: 'users.salesBadge',
+  tone: 'warning',
+  icon: 'handshake',
 };
 
 export const NOTIF_STATUS_META: Record<NotifStatus, StatusMeta> = {
@@ -105,5 +119,4 @@ export const ROLE_META: Record<UserRole, StatusMeta> = {
   ADMIN: { label: 'Admin', labelKey: 'role.ADMIN', tone: 'primary', icon: 'shield' },
   GUARD: { label: 'Guard', labelKey: 'role.GUARD', tone: 'info', icon: 'shield-check' },
   RESIDENT: { label: 'Resident', labelKey: 'role.RESIDENT', tone: 'muted', icon: 'house' },
-  SALES: { label: 'Sales', labelKey: 'role.SALES', tone: 'warning', icon: 'handshake' },
 };

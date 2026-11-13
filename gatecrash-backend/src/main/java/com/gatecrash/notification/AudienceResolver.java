@@ -30,6 +30,10 @@ import java.util.UUID;
  * themselves. A {@code FLATS} or {@code BLOCKS} rule naming another township's ids resolves to no
  * users at all, and is then rejected as an empty audience rather than delivering anywhere.
  *
+ * <p>{@code NODES} is the general form: any mix of nodes at any level, each meaning "everyone
+ * beneath it". It is what the console's building, floor and unit drill-down sends, so "Tower A,
+ * floor 3 of Tower B, and flats C-101 and C-104" is one rule and one query rather than three.
+ *
  * <p>{@code BLOCKS} outgrew its name in V4 and now means "everyone anywhere beneath these nodes",
  * at any depth: name a tower and it reaches every flat in it, name a phase and it reaches the whole
  * phase. The wire name is kept because clients send it; the resolver no longer assumes the thing
@@ -56,6 +60,11 @@ public class AudienceResolver {
                     requireIds(rule.flatIds(), "flatIds"));
             case BLOCKS -> users.findActiveUserIdsUnderNodes(townshipId,
                     requireIds(rule.blockIds(), "blockIds"));
+            // Same subtree query as BLOCKS: a unit's own path is a prefix of itself, so naming a unit
+            // reaches that unit, naming a floor reaches every unit on it, and so on up the tree.
+            case NODES -> users.findActiveUserIdsUnderNodes(townshipId,
+                    requireIds(rule.nodeIds(), "nodeIds"));
+            case SALES_TEAM -> users.findActiveSalesUserIds(townshipId);
         };
     }
 

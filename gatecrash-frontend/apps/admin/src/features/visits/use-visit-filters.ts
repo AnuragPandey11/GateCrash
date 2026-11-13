@@ -30,6 +30,13 @@ export function useVisitFilters(): VisitFilterState {
     () => ({
       status: (params.get('status') as VisitStatus | null) || null,
       visitorType: (params.get('visitorType') as VisitorType | null) || null,
+      // Tri-state in the URL: absent = either, 'true' = met sales, 'false' = did not.
+      meetSalesAgent:
+        params.get('meetSalesAgent') === 'true'
+          ? true
+          : params.get('meetSalesAgent') === 'false'
+            ? false
+            : null,
       gateId: params.get('gateId') ? asId.gate(params.get('gateId') as string) : null,
       flatId: params.get('flatId') ? asId.flat(params.get('flatId') as string) : null,
       from: params.get('from') || null,
@@ -83,7 +90,7 @@ export function useVisitFilters(): VisitFilterState {
   const clear = useCallback(() => setParams(new URLSearchParams(), { replace: true }), [setParams]);
 
   const activeCount = useMemo(
-    () => Object.values(filters).filter((v) => v !== null && v !== '').length,
+    () => Object.values(filters).filter((v) => v !== null && v !== undefined && v !== '').length,
     [filters],
   );
 

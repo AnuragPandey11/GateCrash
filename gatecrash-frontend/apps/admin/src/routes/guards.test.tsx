@@ -71,19 +71,38 @@ describe('password-reset lockout', () => {
 });
 
 describe('role routing', () => {
-  it('sends a resident who found the web URL to a dead-end explanation, not a 403 wall', async () => {
+  it('gives a resident their own home, not the office dashboard', async () => {
+    renderWithProviders(<AppRoutes />, {
+      route: '/',
+      session: { role: 'RESIDENT', loginId: 'A-101-1', fullName: 'Ravi Kumar' },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Hello, Ravi' })).toBeInTheDocument();
+    expect(screen.queryByText('Live occupancy')).not.toBeInTheDocument();
+    // The office's screens are not offered in the resident's navigation at all.
+    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: 'Guest passes' }).length).toBeGreaterThan(0);
+  });
+
+  it('does not define office routes for a resident', async () => {
     renderWithProviders(<AppRoutes />, {
       route: '/occupancy',
       session: { role: 'RESIDENT', loginId: 'A-101-1', fullName: 'Ravi Kumar' },
     });
-
-    expect(await screen.findByText('This account uses the mobile app')).toBeInTheDocument();
+    expect(await screen.findByText('404')).toBeInTheDocument();
     expect(screen.queryByText('Live occupancy')).not.toBeInTheDocument();
   });
 
-  it.each(['GUARD', 'SALES'] as const)('does the same for a %s', async (role) => {
-    renderWithProviders(<AppRoutes />, { route: '/', session: { role } });
-    expect(await screen.findByText('This account uses the mobile app')).toBeInTheDocument();
+  it('gives a guard the gate console', async () => {
+    renderWithProviders(<AppRoutes />, { route: '/', session: { role: 'GUARD' } });
+    expect(await screen.findByText('Pick the gate you are standing at to start.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Users' })).not.toBeInTheDocument();
+  });
+
+  it('adds Approvals for a guard on the sales team', async () => {
+    renderWithProviders(<AppRoutes />, { route: '/', session: { role: 'GUARD', sales: true } });
+    await screen.findByText('Pick the gate you are standing at to start.');
+    expect(screen.getAllByRole('link', { name: 'Approvals' }).length).toBeGreaterThan(0);
   });
 
   it('lets an admin through to the dashboard', async () => {

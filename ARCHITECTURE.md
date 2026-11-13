@@ -24,7 +24,7 @@ Actors and their surfaces:
 | `ADMIN`  | Web dashboard      | One township | Live "inside township" feed, broadcast targeted notifications, post community updates, manage users/gates |
 | `GUARD`  | Tablet at gate     | One township | Log walk-ins, route approval to resident/sales, verify PIN/QR, see live approve/reject result |
 | `RESIDENT`| Mobile app        | One township | Approve/reject walk-ins, generate visitor passes (PIN/QR), read community feed |
-| `SALES`  | Mobile app         | One township | Toggle on/off duty, approve/reject client site-visits, generate passes, read community feed |
+| *Sales team* (flag) | Mobile app | One township | Not a role: an `ADMIN` or `GUARD` with `is_sales` (V6). Toggle on/off duty, approve/reject "Meet Sales Agent" visitors, generate passes, read community feed |
 
 Two load-bearing entities drive everything:
 - **`visitor_log`** — one row per physical arrival at the gate (walk-in *or* pass redemption). It carries the live approval state the Guard screen watches.
@@ -622,7 +622,7 @@ GUARD app            Backend (Spring)                 RESIDENT/SALES app
 
 **Detailed sequence:**
 
-1. **Guard submits.** `POST /visits` with visitor details + chosen target (resident flat, or a sales agent picked from `GET /sales/on-duty`). For `CLIENT` type the target must be `SALES` (DB `CHECK` enforces it).
+1. **Guard submits.** `POST /visits` with visitor details + chosen target (resident flat, or — with the **Meet Sales Agent** tick-box set — a sales agent picked from `GET /sales/on-duty`). A ticked visit must route to `SALES` and an unticked one must not (`sales_meeting_routes_to_sales` CHECK, V6).
 2. **Persist.** Service creates `visitor_log` (`PENDING`) in a `@Transactional` method, writes `audit_log`.
 3. **Resolve tokens.** Look up the approver's `device` rows → FCM token list.
 4. **Dual dispatch.**

@@ -95,6 +95,8 @@ export const API_ERROR_CODES = [
   'WINDOW_TOO_LONG',
   'TOO_MANY_DEVICES',
   'NOT_YET_VALID',
+  'SALES_NOT_ALLOWED_FOR_ROLE',
+  'POST_BODY_EMPTY',
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

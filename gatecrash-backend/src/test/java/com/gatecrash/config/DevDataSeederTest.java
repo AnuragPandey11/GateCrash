@@ -96,7 +96,9 @@ class DevDataSeederTest {
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles(profiles);
         return new DevDataSeeder(users, townships, nodes, property, gates, passwordEncoder,
-                new PasswordPolicy(properties), properties, environment);
+                new PasswordPolicy(properties), properties, environment,
+                mock(com.gatecrash.amenity.AmenityRepository.class),
+                mock(com.gatecrash.billing.InvoiceRepository.class));
     }
 
     private AppProperties properties(boolean seed, String seedPassword) {

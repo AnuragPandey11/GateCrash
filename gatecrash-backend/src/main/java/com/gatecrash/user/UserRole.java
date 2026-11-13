@@ -14,8 +14,15 @@ public enum UserRole {
     ADMIN,
 
     GUARD,
-    RESIDENT,
-    SALES;
+    RESIDENT;
+
+    // There is deliberately no SALES role. Selling is a capability a staff account (ADMIN or GUARD)
+    // carries through AppUser#sales, not an identity of its own -- see V6 and AppUserDetails.
+
+    /** The only roles that may carry the sales flag ({@code sales_is_staff} in V6). */
+    public boolean canBeSales() {
+        return this == ADMIN || this == GUARD;
+    }
 
     /** True for the roles that administer a township, whether scoped to one or acting across all. */
     public boolean isAdministrative() {

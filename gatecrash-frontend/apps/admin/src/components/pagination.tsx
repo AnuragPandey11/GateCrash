@@ -26,7 +26,7 @@ export function Pagination<T>({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 text-sm text-text-muted">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border/70 px-5 py-3.5 text-sm text-text-muted">
         <p className="tabular-nums">
           {from}–{to} {t('common.of')} {page.totalElements}
         </p>

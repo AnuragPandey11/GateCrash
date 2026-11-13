@@ -1,15 +1,22 @@
 package com.gatecrash.visit;
 
 import com.gatecrash.common.AfterCommitExecutor;
+import com.gatecrash.common.PageResponse;
 import com.gatecrash.common.SafeUrl;
 import com.gatecrash.common.audit.AuditAction;
 import com.gatecrash.common.audit.AuditService;
 import com.gatecrash.common.exception.BusinessValidationException;
 import com.gatecrash.common.exception.ConflictException;
 import com.gatecrash.common.exception.ForbiddenException;
+import com.gatecrash.common.exception.TooManyRequestsException;
 import com.gatecrash.common.exception.NotFoundException;
 import com.gatecrash.common.tenant.TenantContext;
+import com.gatecrash.pass.PinHasher;
+import com.gatecrash.push.UserNotifier;
+import com.gatecrash.rules.EntryRule;
+import com.gatecrash.rules.EntryRuleService;
 import com.gatecrash.security.AppUserDetails;
+import com.gatecrash.security.FixedWindowRateLimiter;
 import com.gatecrash.security.SecurityUtils;
 import com.gatecrash.property.PropertyNode;
 import com.gatecrash.property.PropertyService;
@@ -17,7 +24,9 @@ import com.gatecrash.township.Gate;
 import com.gatecrash.township.TownshipService;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.user.AppUserRepository;
+import com.gatecrash.user.PasswordGenerator;
 import com.gatecrash.user.UserRole;
+import com.gatecrash.visit.dto.VisitDtos.CollectionCodeResponse;
 import com.gatecrash.visit.dto.VisitDtos.CreateVisitRequest;
 import com.gatecrash.visit.dto.VisitDtos.Decision;
 import com.gatecrash.visit.dto.VisitDtos.VisitResponse;
@@ -25,10 +34,14 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -69,12 +82,21 @@ public class VisitService {
     private final VisitNotifier notifier;
     private final AuditService audit;
     private final AfterCommitExecutor afterCommit;
+    private final PinHasher codeHasher;
+    private final PasswordGenerator generator;
+    private final FixedWindowRateLimiter rateLimiter;
+    private final EntryRuleService entryRules;
+    private final UserNotifier userNotifier;
+
+    /** Wrong collection codes allowed per visit per window: six digits must not be guessable. */
+    private static final int COLLECT_MAX_ATTEMPTS = 5;
+    private static final Duration COLLECT_WINDOW = Duration.ofMinutes(15);
 
     // ----- creation ---------------------------------------------------------------------------
 
     /**
-     * Logs a walk-in and routes it. CLIENT visits must go to an on-duty sales agent; everything else
-     * goes to the target flat's residents.
+     * Logs a walk-in and routes it. A visitor with "Meet Sales Agent" ticked goes to the chosen
+     * on-duty sales agent; everyone else goes to the target unit's residents.
      */
     @PreAuthorize("hasRole('GUARD')")
     @Transactional
@@ -92,26 +114,57 @@ public class VisitService {
         visit.setVisitorName(request.visitorName().trim());
         visit.setVisitorPhone(blankToNull(request.visitorPhone()));
         visit.setVisitorType(request.visitorType());
+        visit.setMeetSalesAgent(request.isMeetSalesAgent());
         visit.setVehicleNo(blankToNull(request.vehicleNo()));
         visit.setPhotoUrl(SafeUrl.validateHttps(request.photoUrl(), "photoUrl"));
+        visit.setPurpose(blankToNull(request.purpose()));
+        visit.setExpectedDurationMinutes(request.expectedDurationMinutes());
         visit.setStatus(VisitStatus.PENDING);
 
-        List<UUID> notifyUserIds = request.visitorType() == VisitorType.CLIENT
+        List<UUID> notifyUserIds = request.isMeetSalesAgent()
                 ? routeToSales(visit, request)
                 : routeToFlat(visit, request);
+
+        // A society rule the household has had approved lets this visitor straight in: the visit is
+        // born APPROVED and nobody's phone has to ring for a decision. Sales visits never qualify.
+        EntryRule rule = visit.getApproverKind() == ApproverKind.RESIDENT
+                ? entryRules.findMatching(visit.getTargetFlatId(), visit.getVisitorType(),
+                        visit.getVisitorName(), visit.getPurpose(), visit.getVisitorPhone()).orElse(null)
+                : null;
+        if (rule != null) {
+            transition(visit, VisitStatus.APPROVED);
+            visit.setDecidedAt(OffsetDateTime.now());
+            visit.setEntryRuleId(rule.getId());
+        }
 
         visits.save(visit);
         audit.record(AuditAction.VISIT_LOGGED, "visitor_log", visit.getId(),
                 AuditService.detail(
                         "gateId", gate.getId(),
                         "visitorType", visit.getVisitorType(),
+                        "meetSalesAgent", visit.isMeetSalesAgent(),
                         "approverKind", visit.getApproverKind(),
                         "targetFlatId", visit.getTargetFlatId(),
                         "approverId", visit.getApproverId()));
         log.info("Visit {} logged at gate {} by guard {}", visit.getId(), gate.getId(), guard.getId());
 
         UUID visitId = visit.getId();
-        afterCommit.execute(() -> notifier.visitRequested(visitId, notifyUserIds));
+        if (rule != null) {
+            audit.record(AuditAction.VISIT_AUTO_APPROVED, "visitor_log", visitId,
+                    AuditService.detail("entryRuleId", rule.getId()));
+            UUID gateId = gate.getId();
+            String visitorName = visit.getVisitorName();
+            String ruleLabel = rule.getLabel();
+            OffsetDateTime decidedAt = visit.getDecidedAt();
+            afterCommit.execute(() -> {
+                // Other devices at this gate flip too; the household is told, not asked.
+                notifier.visitDecided(visitId, gateId, VisitStatus.APPROVED, visitorName, "Society rule", decidedAt);
+                userNotifier.notify(notifyUserIds, "VISIT", visitId, visitorName + " was let in",
+                        "Allowed by your rule: " + ruleLabel);
+            });
+        } else {
+            afterCommit.execute(() -> notifier.visitRequested(visitId, notifyUserIds));
+        }
 
         return mapper.toResponse(visit);
     }
@@ -120,13 +173,13 @@ public class VisitService {
     private List<UUID> routeToSales(VisitorLog visit, CreateVisitRequest request) {
         if (request.salesAgentId() == null) {
             throw new BusinessValidationException("SALES_AGENT_REQUIRED",
-                    "salesAgentId is required for CLIENT visits.");
+                    "salesAgentId is required when the visitor is here to meet a sales agent.");
         }
         AppUser agent = users
                 .findByIdAndTownship_Id(request.salesAgentId(), TenantContext.requireTownshipId())
                 .orElseThrow(() -> NotFoundException.of("Sales agent", request.salesAgentId()));
 
-        if (agent.getRole() != UserRole.SALES || !agent.isActive()) {
+        if (!agent.isSales() || !agent.isActive()) {
             throw new BusinessValidationException("NOT_A_SALES_AGENT",
                     "The selected approver is not an active sales agent.");
         }
@@ -146,7 +199,7 @@ public class VisitService {
     private List<UUID> routeToFlat(VisitorLog visit, CreateVisitRequest request) {
         if (request.targetFlatId() == null) {
             throw new BusinessValidationException("TARGET_FLAT_REQUIRED",
-                    "targetFlatId is required for non-CLIENT visits.");
+                    "targetFlatId is required unless the visitor is here to meet a sales agent.");
         }
         // requireUnit, not requireNode: a visit is routed to the people who live somewhere, so a
         // guard naming a whole tower is a request that cannot be satisfied, not one to route wide.
@@ -170,19 +223,57 @@ public class VisitService {
     @PreAuthorize("hasAnyRole('RESIDENT','SALES')")
     @Transactional
     public VisitResponse decide(UUID visitId, Decision decision) {
+        return decide(visitId, decision, null);
+    }
+
+    /**
+     * The approver's answer. Three outcomes:
+     * <ul>
+     *   <li>{@code APPROVED} -- optionally with how long the visitor will stay, if the guard did
+     *       not say. That duration is what the overstay alert later measures against.</li>
+     *   <li>{@code REJECTED}.</li>
+     *   <li>{@code LEAVE_AT_GATE} -- deliveries to a household only. The courier stays out, security
+     *       keeps the parcel, and the response carries a six-digit collection code exactly once.</li>
+     * </ul>
+     */
+    @PreAuthorize("hasAnyRole('RESIDENT','SALES')")
+    @Transactional
+    public VisitResponse decide(UUID visitId, Decision decision, Integer expectedDurationMinutes) {
         AppUserDetails caller = SecurityUtils.currentUser();
         VisitorLog visit = lockVisit(visitId);
 
         requireApprover(visit, caller);
 
-        VisitStatus target = decision == Decision.APPROVED ? VisitStatus.APPROVED : VisitStatus.REJECTED;
+        VisitStatus target = switch (decision) {
+            case APPROVED -> VisitStatus.APPROVED;
+            case REJECTED -> VisitStatus.REJECTED;
+            case LEAVE_AT_GATE -> VisitStatus.LEFT_AT_GATE;
+        };
+        if (decision == Decision.LEAVE_AT_GATE
+                && (visit.getVisitorType() != VisitorType.DELIVERY
+                    || visit.getApproverKind() != ApproverKind.RESIDENT)) {
+            throw new BusinessValidationException("LEAVE_AT_GATE_DELIVERY_ONLY",
+                    "Only a delivery to a household can be left at the gate.");
+        }
         transition(visit, target);
         visit.setDecidedAt(OffsetDateTime.now());
+        if (decision == Decision.APPROVED && expectedDurationMinutes != null
+                && visit.getExpectedDurationMinutes() == null) {
+            visit.setExpectedDurationMinutes(expectedDurationMinutes);
+        }
+        String collectionCode = null;
+        if (decision == Decision.LEAVE_AT_GATE) {
+            collectionCode = issueCollectionCode(visit);
+        }
         visits.save(visit);
 
         AppUser decider = users.getReferenceById(caller.getId());
-        audit.record(decision == Decision.APPROVED ? AuditAction.VISIT_APPROVED : AuditAction.VISIT_REJECTED,
-                "visitor_log", visitId, AuditService.detail("decidedBy", caller.getId()));
+        String action = switch (decision) {
+            case APPROVED -> AuditAction.VISIT_APPROVED;
+            case REJECTED -> AuditAction.VISIT_REJECTED;
+            case LEAVE_AT_GATE -> AuditAction.VISIT_LEFT_AT_GATE;
+        };
+        audit.record(action, "visitor_log", visitId, AuditService.detail("decidedBy", caller.getId()));
         log.info("Visit {} {} by user {}", visitId, target, caller.getId());
 
         UUID gateId = visit.getGate().getId();
@@ -192,7 +283,7 @@ public class VisitService {
         afterCommit.execute(() ->
                 notifier.visitDecided(visitId, gateId, target, visitorName, deciderName, decidedAt));
 
-        return mapper.toResponse(visit);
+        return mapper.toResponse(visit, collectionCode);
     }
 
     @PreAuthorize("hasRole('GUARD')")
@@ -200,7 +291,11 @@ public class VisitService {
     public VisitResponse checkIn(UUID visitId) {
         VisitorLog visit = lockVisit(visitId);
         transition(visit, VisitStatus.CHECKED_IN);
-        visit.setCheckedInAt(OffsetDateTime.now());
+        OffsetDateTime now = OffsetDateTime.now();
+        visit.setCheckedInAt(now);
+        if (visit.getExpectedDurationMinutes() != null && visit.getExpectedOutAt() == null) {
+            visit.setExpectedOutAt(now.plusMinutes(visit.getExpectedDurationMinutes()));
+        }
         visits.save(visit);
 
         audit.record(AuditAction.VISIT_CHECKED_IN, "visitor_log", visitId, null);
@@ -221,7 +316,126 @@ public class VisitService {
         return mapper.toResponse(visit);
     }
 
+    // ----- Leave at Gate ----------------------------------------------------------------------
+
+    /**
+     * A resident who lost the code asks for a new one. The old code stops working at once -- only
+     * the latest digest is kept -- so a code read over someone's shoulder cannot be replayed.
+     */
+    @PreAuthorize("hasRole('RESIDENT')")
+    @Transactional
+    public CollectionCodeResponse reissueCollectionCode(UUID visitId) {
+        AppUserDetails caller = SecurityUtils.currentUser();
+        VisitorLog visit = lockVisit(visitId);
+        requireApprover(visit, caller);
+        if (visit.getStatus() != VisitStatus.LEFT_AT_GATE) {
+            throw new ConflictException("NOT_AT_GATE", "There is no parcel waiting at the gate for this visit.");
+        }
+        String code = issueCollectionCode(visit);
+        visits.save(visit);
+        audit.record(AuditAction.VISIT_COLLECTION_CODE_REISSUED, "visitor_log", visitId, null);
+        return new CollectionCodeResponse(visitId, code);
+    }
+
+    /**
+     * The guard hands a parcel over against the resident's code. Attempts are rate-limited per
+     * visit, and every wrong code is audited, because a million combinations is only safe when
+     * nobody can try them all.
+     */
+    @PreAuthorize("hasRole('GUARD')")
+    @Transactional
+    public VisitResponse collectParcel(UUID visitId, String code) {
+        VisitorLog visit = lockVisit(visitId);
+        if (visit.getStatus() != VisitStatus.LEFT_AT_GATE) {
+            throw new ConflictException("NOT_AT_GATE", "There is no parcel waiting at the gate for this visit.");
+        }
+        String key = "collect:" + visitId;
+        if (!rateLimiter.tryAcquire(key, COLLECT_MAX_ATTEMPTS, COLLECT_WINDOW)) {
+            throw new TooManyRequestsException("Too many wrong codes for this parcel. Try again later.");
+        }
+        String expected = visit.getCollectionCodeLookup();
+        String supplied = codeHasher.lookupValue(code);
+        if (expected == null || !MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8), supplied.getBytes(StandardCharsets.UTF_8))) {
+            audit.record(AuditAction.VISIT_PARCEL_COLLECT_FAILED, "visitor_log", visitId, null);
+            throw new BusinessValidationException("WRONG_COLLECTION_CODE", "That collection code is not correct.");
+        }
+        rateLimiter.reset(key);
+        transition(visit, VisitStatus.COLLECTED);
+        visit.setCollectedAt(OffsetDateTime.now());
+        visit.setCollectionCodeLookup(null);
+        visits.save(visit);
+        audit.record(AuditAction.VISIT_PARCEL_COLLECTED, "visitor_log", visitId, null);
+        return mapper.toResponse(visit);
+    }
+
+    // ----- duration -----------------------------------------------------------------------------
+
+    /**
+     * The host extends a stay. Counted from the later of now and the current expected exit, so
+     * extending an already-overdue visit by an hour means "an hour from now", not "an hour after a
+     * time that has passed". Clearing the alert stamp is what lets the alarm fire again later.
+     */
+    @PreAuthorize("hasAnyRole('RESIDENT','SALES')")
+    @Transactional
+    public VisitResponse extendStay(UUID visitId, int extendMinutes) {
+        AppUserDetails caller = SecurityUtils.currentUser();
+        VisitorLog visit = lockVisit(visitId);
+        requireApprover(visit, caller);
+        if (visit.getStatus() != VisitStatus.CHECKED_IN && visit.getStatus() != VisitStatus.APPROVED) {
+            throw new ConflictException("NOT_INSIDE", "Only a visitor who is approved or inside can have their stay extended.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (visit.getStatus() == VisitStatus.APPROVED) {
+            int base = visit.getExpectedDurationMinutes() == null ? 0 : visit.getExpectedDurationMinutes();
+            visit.setExpectedDurationMinutes(clampDuration(base + extendMinutes));
+        } else {
+            OffsetDateTime from = visit.getExpectedOutAt() == null || visit.getExpectedOutAt().isBefore(now)
+                    ? now : visit.getExpectedOutAt();
+            OffsetDateTime newOut = from.plusMinutes(extendMinutes);
+            long total = Duration.between(visit.getCheckedInAt(), newOut).toMinutes();
+            if (total > VisitDtosBounds.MAX) {
+                throw new BusinessValidationException("STAY_TOO_LONG", "A visit cannot be extended beyond seven days.");
+            }
+            visit.setExpectedOutAt(newOut);
+            visit.setExpectedDurationMinutes(clampDuration((int) total));
+            visit.setOverstayAlertedAt(null);
+        }
+        visits.save(visit);
+        audit.record(AuditAction.VISIT_STAY_EXTENDED, "visitor_log", visitId,
+                AuditService.detail("extendMinutes", extendMinutes, "by", caller.getId()));
+
+        UUID gateId = visit.getGate().getId();
+        String visitorName = visit.getVisitorName();
+        OffsetDateTime expectedOut = visit.getExpectedOutAt();
+        String byName = users.findById(caller.getId()).map(AppUser::getFullName).orElse(null);
+        afterCommit.execute(() -> notifier.stayExtended(visitId, gateId, visitorName, expectedOut, byName));
+        return mapper.toResponse(visit);
+    }
+
     // ----- reads ------------------------------------------------------------------------------
+
+    /**
+     * The caller's own visit history: their household's for a resident, their own for a sales
+     * agent. Every visit, every outcome, newest first.
+     */
+    @PreAuthorize("hasAnyRole('RESIDENT','SALES')")
+    @Transactional(readOnly = true)
+    public PageResponse<VisitResponse> historyForCurrentUser(Pageable pageable) {
+        AppUserDetails caller = SecurityUtils.currentUser();
+        if (caller.getRole() == UserRole.RESIDENT) {
+            if (caller.getFlatId() == null) {
+                return PageResponse.of(org.springframework.data.domain.Page.<VisitorLog>empty(pageable),
+                        (VisitorLog v) -> mapper.toResponse(v));
+            }
+            return PageResponse.of(
+                    visits.findByTargetUnit_IdOrderByCreatedAtDesc(caller.getFlatId(), pageable),
+                    (VisitorLog v) -> mapper.toResponse(v));
+        }
+        return PageResponse.of(visits.findByApprover_IdAndApproverKindOrderByCreatedAtDesc(
+                caller.getId(), ApproverKind.SALES, pageable), (VisitorLog v) -> mapper.toResponse(v));
+    }
 
     /**
      * A single visit. Readable by the guard force, the routed approver, and admins -- and by nobody
@@ -237,7 +451,7 @@ public class VisitService {
             // SUPER_ADMIN reaches this only through a township it named explicitly, and the lookup
             // above has already confined the row to that township.
             case SUPER_ADMIN, ADMIN, GUARD -> true;
-            case RESIDENT, SALES -> isApprover(visit, caller);
+            case RESIDENT -> isApprover(visit, caller);
         };
         if (!permitted) {
             throw new ForbiddenException("This visit is not routed to you.");
@@ -316,7 +530,7 @@ public class VisitService {
                     && flatId.equals(caller.getFlatId());
         }
         if (visit.getApproverKind() == ApproverKind.SALES) {
-            return caller.getRole() == UserRole.SALES
+            return caller.isSales()
                     && caller.getId().equals(visit.getApproverId());
         }
         return false;
@@ -338,6 +552,22 @@ public class VisitService {
         String gateName = visit.getGate().getName();
         afterCommit.execute(() ->
                 notifier.occupancyChanged(townshipId, visitId, status, visitorName, gateName));
+    }
+
+    private String issueCollectionCode(VisitorLog visit) {
+        String code = generator.generateNumericPin(6);
+        visit.setCollectionCodeLookup(codeHasher.lookupValue(code));
+        return code;
+    }
+
+    private static int clampDuration(int minutes) {
+        return Math.max(VisitDtosBounds.MIN, Math.min(VisitDtosBounds.MAX, minutes));
+    }
+
+    /** Local aliases so the bounds read naturally in the arithmetic above. */
+    private static final class VisitDtosBounds {
+        static final int MIN = com.gatecrash.visit.dto.VisitDtos.MIN_DURATION_MINUTES;
+        static final int MAX = com.gatecrash.visit.dto.VisitDtos.MAX_DURATION_MINUTES;
     }
 
     private String blankToNull(String value) {

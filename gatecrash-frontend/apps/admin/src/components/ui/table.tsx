@@ -17,7 +17,7 @@ export function Table({ className, ...props }: ComponentPropsWithoutRef<'table'>
 }
 
 export function THead({ className, ...props }: ComponentPropsWithoutRef<'thead'>) {
-  return <thead className={cn('border-b border-border', className)} {...props} />;
+  return <thead className={cn('border-b border-border bg-surface-raised/50', className)} {...props} />;
 }
 
 export function TBody({ className, ...props }: ComponentPropsWithoutRef<'tbody'>) {
@@ -28,7 +28,7 @@ export function TR({ className, ...props }: ComponentPropsWithoutRef<'tr'>) {
   return (
     <tr
       className={cn(
-        'border-b border-border transition-colors data-[clickable=true]:cursor-pointer hover:bg-surface-raised/60',
+        'border-b border-border/70 transition-colors duration-150 data-[clickable=true]:cursor-pointer hover:bg-accent-soft/40',
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ export function TH({ className, ...props }: ComponentPropsWithoutRef<'th'>) {
   return (
     <th
       className={cn(
-        'h-10 whitespace-nowrap px-3 text-left align-middle text-xs font-semibold uppercase tracking-wide text-text-muted',
+        'h-11 whitespace-nowrap px-4 text-left align-middle text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-text-muted',
         className,
       )}
       {...props}
@@ -49,5 +49,5 @@ export function TH({ className, ...props }: ComponentPropsWithoutRef<'th'>) {
 }
 
 export function TD({ className, ...props }: ComponentPropsWithoutRef<'td'>) {
-  return <td className={cn('px-3 py-2.5 align-middle text-text', className)} {...props} />;
+  return <td className={cn('px-4 py-3 align-middle text-text', className)} {...props} />;
 }

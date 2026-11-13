@@ -3,10 +3,20 @@ package com.gatecrash.visit;
 import com.gatecrash.visit.dto.VisitDtos.VisitResponse;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+
 @Component
 public class VisitMapper {
 
     public VisitResponse toResponse(VisitorLog visit) {
+        return toResponse(visit, null);
+    }
+
+    /** {@code collectionCode} is passed only by the Leave-at-Gate decision, the one time it exists. */
+    public VisitResponse toResponse(VisitorLog visit, String collectionCode) {
+        boolean overstaying = visit.getStatus() == VisitStatus.CHECKED_IN
+                && visit.getExpectedOutAt() != null
+                && visit.getExpectedOutAt().isBefore(OffsetDateTime.now());
         return new VisitResponse(
                 visit.getId(),
                 visit.getGate().getId(),
@@ -14,6 +24,7 @@ public class VisitMapper {
                 visit.getVisitorName(),
                 visit.getVisitorPhone(),
                 visit.getVisitorType(),
+                visit.isMeetSalesAgent(),
                 visit.getVehicleNo(),
                 visit.getPhotoUrl(),
                 visit.getStatus(),
@@ -27,6 +38,13 @@ public class VisitMapper {
                 visit.getCreatedAt(),
                 visit.getDecidedAt(),
                 visit.getCheckedInAt(),
-                visit.getCheckedOutAt());
+                visit.getCheckedOutAt(),
+                visit.getPurpose(),
+                visit.getExpectedDurationMinutes(),
+                visit.getExpectedOutAt(),
+                overstaying,
+                visit.getCollectedAt(),
+                collectionCode,
+                visit.getEntryRuleId() != null);
     }
 }

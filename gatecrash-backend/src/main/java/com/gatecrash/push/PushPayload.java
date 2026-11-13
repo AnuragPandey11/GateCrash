@@ -21,6 +21,8 @@ public record PushPayload(String type, String title, String body, Map<String, St
     public static final String TYPE_VISIT_EXPIRED = "VISIT_EXPIRED";
     public static final String TYPE_PASS_REDEEMED = "PASS_REDEEMED";
     public static final String TYPE_ANNOUNCEMENT = "ANNOUNCEMENT";
+    public static final String TYPE_OVERSTAY_ALERT = "OVERSTAY_ALERT";
+    public static final String TYPE_SERVICE_UPDATE = "SERVICE_UPDATE";
 
     public PushPayload {
         data = data == null ? Map.of() : Map.copyOf(data);

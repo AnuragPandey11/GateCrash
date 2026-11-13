@@ -10,7 +10,7 @@ import {
   type UserFilters,
   type UserResponse,
 } from '@gatecrash/api';
-import { USER_ROLES, formatDateTime, type UserId, type UserRole } from '@gatecrash/core';
+import { USER_ROLES, canBeSales, formatDateTime, type UserId, type UserRole } from '@gatecrash/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { MoreHorizontal, Plus, UserPlus, Users as UsersIcon } from 'lucide-react';
@@ -19,7 +19,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/app-shell';
 import { Pagination } from '@/components/pagination';
-import { RoleBadge } from '@/components/status-badge';
+import { RoleBadge, SalesBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/select';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { TBody, TD, TH, THead, TR, Table, TableWrap } from '@/components/ui/table';
-import { CreateUserDialog } from '@/features/users/create-user-dialog';
+import { CreateUserDialog, SalesCheckbox } from '@/features/users/create-user-dialog';
 import { CredentialDialog } from '@/features/users/credential-dialog';
 import { useDebounced } from '@/lib/use-debounced';
 import { applyFieldErrors, errorMessage, toastError } from '@/lib/errors';
@@ -71,6 +71,7 @@ export function UsersRoute() {
 
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<UserRole | null>(null);
+  const [sales, setSales] = useState<boolean | null>(null);
   const [active, setActive] = useState<boolean | null>(null);
   const [page, setPage] = useState<PageArgs>({ page: 1, size: PAGE_DEFAULTS.users });
 
@@ -82,7 +83,7 @@ export function UsersRoute() {
   >(null);
 
   const debouncedSearch = useDebounced(search, 300);
-  const filters: UserFilters = { role, active, search: debouncedSearch || null };
+  const filters: UserFilters = { role, sales, active, search: debouncedSearch || null };
   const { data, isPending, isError, error, refetch, isPlaceholderData } = useUsers(filters, page);
 
   const setActiveMutation = useSetUserActive();
@@ -116,6 +117,7 @@ export function UsersRoute() {
   return (
     <>
       <PageHeader
+        eyebrow={t('pageEyebrow.people')}
         title={t('users.title')}
         description={t('users.subtitle')}
         actions={
@@ -127,7 +129,7 @@ export function UsersRoute() {
       />
 
       <Card className="mb-4 p-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label={t('common.search')}>
             {(props) => (
               <Input
@@ -161,6 +163,27 @@ export function UsersRoute() {
                       {t(`role.${option}`)}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            )}
+          </Field>
+
+          <Field label={t('users.filters.team')}>
+            {(props) => (
+              <Select
+                value={sales === null ? ANY_VALUE : String(sales)}
+                onValueChange={(v) => {
+                  setSales(v === ANY_VALUE ? null : v === 'true');
+                  setPage((p) => ({ ...p, page: 1 }));
+                }}
+              >
+                <SelectTrigger {...props}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY_VALUE}>{t('common.all')}</SelectItem>
+                  <SelectItem value="true">{t('users.filters.salesOnly')}</SelectItem>
+                  <SelectItem value="false">{t('users.filters.notSales')}</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -229,7 +252,10 @@ export function UsersRoute() {
                       <TD className="font-medium">{user.fullName}</TD>
                       <TD className="font-credential text-sm">{user.loginId}</TD>
                       <TD>
-                        <RoleBadge role={user.role} />
+                        <div className="flex flex-wrap gap-1">
+                          <RoleBadge role={user.role} />
+                          {user.sales ? <SalesBadge /> : null}
+                        </div>
                       </TD>
                       <TD className="whitespace-nowrap">
                         {user.flatNumber ? (
@@ -255,7 +281,7 @@ export function UsersRoute() {
                           {user.mustResetPassword ? (
                             <Badge tone="warning">{t('users.mustReset')}</Badge>
                           ) : null}
-                          {user.role === 'SALES' ? (
+                          {user.sales ? (
                             <Badge tone={user.onDuty ? 'info' : 'muted'}>
                               {user.onDuty ? t('users.onDuty') : t('users.offDuty')}
                             </Badge>
@@ -413,11 +439,12 @@ function RowMenu({
 }
 
 /**
- * `PATCH /admin/users/{id}` edits `fullName`, `phone` and `email` **only**.
+ * `PATCH /admin/users/{id}` edits `fullName`, `phone`, `email` and — for admin and guard
+ * accounts — sales-team membership.
  *
- * The body is built from exactly those three fields. Sending back a spread of the row would
- * include `role`, `active` and `createdAt`, and Jackson's `fail-on-unknown-properties` would
- * answer `400 MALFORMED_BODY` (§4.3.1).
+ * The body is built from exactly those fields. Sending back a spread of the row would include
+ * `role`, `active` and `createdAt`, and Jackson's `fail-on-unknown-properties` would answer
+ * `400 MALFORMED_BODY` (§4.3.1).
  */
 function EditUserDialog({ user, onClose }: { user: UserResponse; onClose: () => void }) {
   const { t } = useTranslation();
@@ -429,8 +456,11 @@ function EditUserDialog({ user, onClose }: { user: UserResponse; onClose: () => 
       fullName: user.fullName,
       phone: user.phone ?? '',
       email: user.email ?? '',
+      sales: user.sales,
     },
   });
+  const salesAllowed = canBeSales(user.role);
+  const sales = form.watch('sales') ?? false;
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
@@ -440,6 +470,10 @@ function EditUserDialog({ user, onClose }: { user: UserResponse; onClose: () => 
           fullName: values.fullName?.trim(),
           phone: values.phone?.trim() || undefined,
           email: values.email?.trim() || undefined,
+          // Sent only when it changed, so an edit to a phone number never touches duty state.
+          ...(salesAllowed && values.sales !== undefined && values.sales !== user.sales
+            ? { sales: values.sales }
+            : {}),
         },
       });
       toast.success(t('users.edit.saved'));
@@ -470,6 +504,12 @@ function EditUserDialog({ user, onClose }: { user: UserResponse; onClose: () => 
           <Field label={t('users.form.email')} error={form.formState.errors.email?.message}>
             {(props) => <Input {...props} {...form.register('email')} type="email" />}
           </Field>
+          {salesAllowed ? (
+            <SalesCheckbox
+              checked={sales}
+              onCheckedChange={(checked) => form.setValue('sales', checked, { shouldDirty: true })}
+            />
+          ) : null}
           <DialogFooter>
             <Button variant="secondary" onClick={onClose}>
               {t('common.cancel')}

@@ -37,11 +37,12 @@ public class AdminVisitController {
     public PageResponse<VisitResponse> search(
             @RequestParam(required = false) VisitStatus status,
             @RequestParam(required = false) VisitorType visitorType,
+            @RequestParam(required = false) Boolean meetSalesAgent,
             @RequestParam(required = false) UUID gateId,
             @RequestParam(required = false) UUID flatId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return adminVisits.search(status, visitorType, gateId, flatId, from, to, pageable);
+        return adminVisits.search(status, visitorType, meetSalesAgent, gateId, flatId, from, to, pageable);
     }
 }

@@ -77,17 +77,22 @@ public class DevDataSeeder implements ApplicationRunner {
     private final PasswordPolicy passwordPolicy;
     private final AppProperties properties;
     private final Environment environment;
+    private final com.gatecrash.amenity.AmenityRepository amenities;
+    private final com.gatecrash.billing.InvoiceRepository invoices;
 
-    /** One account per role. The resident is attached to the first seeded flat. */
-    private record SeedAccount(UserRole role, String loginId, String fullName, String phone) {
+    /**
+     * One account per role, plus a sales agent -- a GUARD with the sales flag, since sales is a
+     * capability rather than a role (V6). The resident is attached to the first seeded flat.
+     */
+    private record SeedAccount(UserRole role, boolean sales, String loginId, String fullName, String phone) {
     }
 
     private static final List<SeedAccount> STAFF = List.of(
-            new SeedAccount(UserRole.GUARD, "guard-01", "Gate Guard One", "+919800000001"),
-            new SeedAccount(UserRole.SALES, "sales-01", "Meera Shah", "+919800000002"));
+            new SeedAccount(UserRole.GUARD, false, "guard-01", "Gate Guard One", "+919800000001"),
+            new SeedAccount(UserRole.GUARD, true, "sales-01", "Meera Shah", "+919800000002"));
 
     private static final SeedAccount RESIDENT =
-            new SeedAccount(UserRole.RESIDENT, null, "Ravi Kumar", "+919800000003");
+            new SeedAccount(UserRole.RESIDENT, false, null, "Ravi Kumar", "+919800000003");
 
     @Override
     @Transactional
@@ -128,11 +133,12 @@ public class DevDataSeeder implements ApplicationRunner {
         PropertyNode block = seedBlock(township);
         List<PropertyNode> seededFlats = seedFlats(township, block);
         seedGate(township);
+        seedResidentServices(township, seededFlats.get(0));
 
         List<String> created = new ArrayList<>();
         for (SeedAccount staff : STAFF) {
             if (seedStaff(township, staff, password)) {
-                created.add(staff.role() + " " + staff.loginId());
+                created.add(staff.role() + (staff.sales() ? " (sales) " : " ") + staff.loginId());
             }
         }
 
@@ -187,12 +193,12 @@ public class DevDataSeeder implements ApplicationRunner {
      */
     private void validateSeedPassword(String password) {
         List<SeedAccount> candidates = new ArrayList<>(STAFF);
-        candidates.add(new SeedAccount(UserRole.ADMIN, properties.bootstrap().adminLoginId(),
+        candidates.add(new SeedAccount(UserRole.ADMIN, false, properties.bootstrap().adminLoginId(),
                 "Bootstrap Admin", null));
-        candidates.add(new SeedAccount(UserRole.SUPER_ADMIN, properties.bootstrap().superAdminLoginId(),
+        candidates.add(new SeedAccount(UserRole.SUPER_ADMIN, false, properties.bootstrap().superAdminLoginId(),
                 "Bootstrap Super Admin", null));
         // Matches what UserProvisioningService would derive for the first resident of the first flat.
-        candidates.add(new SeedAccount(UserRole.RESIDENT, FLAT_NUMBERS.get(0) + "-1",
+        candidates.add(new SeedAccount(UserRole.RESIDENT, false, FLAT_NUMBERS.get(0) + "-1",
                 RESIDENT.fullName(), null));
 
         for (SeedAccount candidate : candidates) {
@@ -252,12 +258,62 @@ public class DevDataSeeder implements ApplicationRunner {
         gates.save(gate);
     }
 
+    /**
+     * Two amenities and two paid bills on the first flat, so the resident's Amenities and Bills tabs
+     * have something to show on a fresh database. Skipped once either exists.
+     */
+    private void seedResidentServices(Township township, PropertyNode flat) {
+        if (amenities.findByTownshipIdOrderByNameAsc(township.getId()).isEmpty()) {
+            amenities.save(amenity(township, "Clubhouse", "Party hall with seating for 40.", 1, 9, 22, 60, 3));
+            amenities.save(amenity(township, "Badminton Court", "Indoor court. Bring your own racquets.", 1, 6, 22, 60, 2));
+        }
+        if (invoices.countByUnit_IdAndStatus(flat.getId(), com.gatecrash.billing.InvoiceStatus.PAID) == 0) {
+            invoices.save(paidInvoice(township, flat, com.gatecrash.billing.InvoiceCategory.MAINTENANCE,
+                    "Maintenance charges", "Oct 2026", 350_000, "R-261005-DEMO1"));
+            invoices.save(paidInvoice(township, flat, com.gatecrash.billing.InvoiceCategory.ELECTRICITY,
+                    "Common-area electricity", "Oct 2026", 82_000, "R-261008-DEMO2"));
+        }
+    }
+
+    private com.gatecrash.amenity.Amenity amenity(Township township, String name, String description,
+                                                 int capacity, int openHour, int closeHour, int slotMinutes,
+                                                 int maxSlots) {
+        com.gatecrash.amenity.Amenity amenity = new com.gatecrash.amenity.Amenity();
+        amenity.setTownshipId(township.getId());
+        amenity.setName(name);
+        amenity.setDescription(description);
+        amenity.setCapacity(capacity);
+        amenity.setOpenTime(java.time.LocalTime.of(openHour, 0));
+        amenity.setCloseTime(java.time.LocalTime.of(closeHour, 0));
+        amenity.setSlotMinutes(slotMinutes);
+        amenity.setMaxSlotsPerBooking(maxSlots);
+        return amenity;
+    }
+
+    private com.gatecrash.billing.Invoice paidInvoice(Township township, PropertyNode flat,
+                                                     com.gatecrash.billing.InvoiceCategory category, String title,
+                                                     String period, long paise, String receipt) {
+        com.gatecrash.billing.Invoice invoice = new com.gatecrash.billing.Invoice();
+        invoice.setTownshipId(township.getId());
+        invoice.setUnit(flat);
+        invoice.setCategory(category);
+        invoice.setTitle(title);
+        invoice.setPeriodLabel(period);
+        invoice.setAmountPaise(paise);
+        invoice.setStatus(com.gatecrash.billing.InvoiceStatus.PAID);
+        invoice.setPaidAt(java.time.OffsetDateTime.now().minusDays(20));
+        invoice.setPaymentMethod("UPI");
+        invoice.setReceiptNo(receipt);
+        return invoice;
+    }
+
     private boolean seedStaff(Township township, SeedAccount account, String password) {
         if (users.existsByTownship_IdAndLoginId(township.getId(), account.loginId())) {
             return false;
         }
         AppUser user = newUser(township, account.role(), account.loginId(), account.fullName(),
                 account.phone(), password);
+        user.setSales(account.sales());
         users.save(user);
         return true;
     }

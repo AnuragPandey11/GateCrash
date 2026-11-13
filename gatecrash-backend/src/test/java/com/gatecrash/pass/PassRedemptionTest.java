@@ -208,6 +208,7 @@ class PassRedemptionTest extends AbstractIntegrationTest {
         Map<String, Object> request = new HashMap<>();
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Long Stay");
+        request.put("visitorPhone", "+919811122233");
         request.put("maxUses", 1);
         request.put("validUntil", OffsetDateTime.now().plusDays(400).toString());
 
@@ -225,6 +226,7 @@ class PassRedemptionTest extends AbstractIntegrationTest {
         Map<String, Object> request = new HashMap<>();
         request.put("visitorType", "GUEST");
         request.put("visitorName", "Expected Guest");
+        request.put("visitorPhone", "+919811122233");
         request.put("maxUses", maxUses);
         request.put("validUntil", validUntil.toString());
 

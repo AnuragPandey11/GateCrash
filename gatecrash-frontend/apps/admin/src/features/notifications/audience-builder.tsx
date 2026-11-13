@@ -1,77 +1,54 @@
-import { usePropertyNodes } from '@gatecrash/api';
 import {
   AUDIENCE_LIMITS,
-  AUDIENCE_MODES,
-  USER_ROLES,
-  type AudienceMode,
+  COMPOSER_AUDIENCE_MODES,
   type AudienceRule,
   type AudienceRuleError,
-  type BlockId,
-  type FlatId,
   type UserRole,
 } from '@gatecrash/core';
-import { useMemo } from 'react';
+import { Building2, Handshake, Users, UsersRound, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/cn';
 import { useNomenclature } from '@/features/property/use-nomenclature';
+import { cn } from '@/lib/cn';
+import { PropertyPicker } from './property-picker';
 
 /**
- * The audience builder — FRONTEND.md §8.5.2.
+ * The audience builder — FRONTEND.md §8.5.2, reworked.
  *
- * A mode selector driving different controls, because the five modes take genuinely different
- * inputs and a single "who" widget that tried to cover all of them would be worse at each.
+ * Four plain choices instead of five modes with overlapping meanings:
+ *
+ *  - **Everyone** in the township.
+ *  - **Specific homes** — drill down building → floor → unit and tick at any level. This is the
+ *    one for "please pay your electricity bill": a tower, a floor, or a handful of flats.
+ *  - **By role** — residents, guards, admins.
+ *  - **Sales team** — accounts with the sales flag, whatever their role.
  *
  * Selection state is held per-mode by the parent rather than being cleared on every switch, so
- * an admin who flicks between FLATS and BLOCKS to compare reach does not lose their work — and
+ * flicking between modes to compare reach does not lose a careful selection — and
  * `buildAudienceRule` guarantees only the active mode's list is ever sent (§4.3.1).
  */
+
+/** Roles a township admin can address. SUPER_ADMIN belongs to no township, so it is never a recipient. */
+const ADDRESSABLE_ROLES = ['RESIDENT', 'GUARD', 'ADMIN'] as const satisfies readonly UserRole[];
+
+const MODE_ICONS: Record<(typeof COMPOSER_AUDIENCE_MODES)[number], LucideIcon> = {
+  ALL: UsersRound,
+  NODES: Building2,
+  ROLES: Users,
+  SALES_TEAM: Handshake,
+};
 
 export interface AudienceBuilderProps {
   rule: AudienceRule;
   onChange: (rule: AudienceRule) => void;
   error: AudienceRuleError | null;
-  flatSearch: string;
-  onFlatSearchChange: (value: string) => void;
 }
 
-export function AudienceBuilder({
-  rule,
-  onChange,
-  error,
-  flatSearch,
-  onFlatSearchChange,
-}: AudienceBuilderProps) {
+export function AudienceBuilder({ rule, onChange, error }: AudienceBuilderProps) {
   const { t } = useTranslation();
   const nom = useNomenclature();
-  // BLOCKS outgrew its name server-side: it now means "everyone anywhere beneath these nodes", at
-  // any depth. Offering the outermost level keeps the picker meaningful for every project shape --
-  // towers in a high-rise, clusters in a villa community, phases in a mixed-use township.
-  const blocks = usePropertyNodes({ depth: 0 });
-  const flats = usePropertyNodes(
-    { depth: nom.unitLevel?.depth ?? null },
-    { enabled: nom.unitLevel != null },
-  );
-
+  const unitPlural = (nom.unitLevel?.plural ?? 'units').toLowerCase();
   const selectedRoles = new Set(rule.roles ?? []);
-  const selectedFlats = new Set(rule.flatIds ?? []);
-  const selectedBlocks = new Set(rule.blockIds ?? []);
-
-  const flatsByBlock = useMemo(() => {
-    const needle = flatSearch.trim().toLowerCase();
-    const groups = new Map<string, { name: string; flats: { id: FlatId; number: string }[] }>();
-    for (const flat of flats.data ?? []) {
-      const label = flat.code ?? flat.name;
-      if (needle && !label.toLowerCase().includes(needle)) continue;
-      const key = flat.containerName ?? '';
-      const group = groups.get(key) ?? { name: key, flats: [] };
-      group.flats.push({ id: flat.id, number: label });
-      groups.set(key, group);
-    }
-    return groups;
-  }, [flats.data, flatSearch]);
 
   const toggleRole = (role: UserRole) => {
     const next = new Set(selectedRoles);
@@ -80,61 +57,50 @@ export function AudienceBuilder({
     onChange({ ...rule, roles: [...next] });
   };
 
-  const toggleFlat = (id: FlatId) => {
-    const next = new Set(selectedFlats);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange({ ...rule, flatIds: [...next] });
-  };
-
-  const toggleBlockOfFlats = (ids: FlatId[]) => {
-    const next = new Set(selectedFlats);
-    // "Select all in block" is a toggle: if every flat in the block is already selected, the
-    // same click clears them. A button that only ever adds is a trap on a 40-flat block.
-    const allSelected = ids.every((id) => next.has(id));
-    for (const id of ids) {
-      if (allSelected) next.delete(id);
-      else next.add(id);
-    }
-    onChange({ ...rule, flatIds: [...next] });
-  };
-
-  const toggleBlock = (id: BlockId) => {
-    const next = new Set(selectedBlocks);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange({ ...rule, blockIds: [...next] });
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {AUDIENCE_MODES.map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            aria-pressed={rule.mode === mode}
-            onClick={() => onChange({ ...rule, mode: mode as AudienceMode })}
-            className={cn(
-              'rounded-md border px-3 py-1.5 text-sm font-medium transition-colors',
-              rule.mode === mode
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border text-text-muted hover:text-text',
-            )}
-          >
-            {t(`notifications.compose.mode.${mode}`)}
-          </button>
-        ))}
+    <div className="space-y-4">
+      <div role="radiogroup" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {COMPOSER_AUDIENCE_MODES.map((mode) => {
+          const Icon = MODE_ICONS[mode];
+          const active = rule.mode === mode;
+          return (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange({ ...rule, mode })}
+              className={cn(
+                'flex items-start gap-3 rounded-[14px] border p-4 text-left transition-all duration-300 ease-out-expo',
+                active
+                  ? 'border-accent bg-accent-soft shadow-raised ring-1 ring-accent/60'
+                  : 'border-border bg-surface hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-soft',
+              )}
+            >
+              <Icon
+                className={cn('mt-0.5 size-5 shrink-0 transition-colors', active ? 'text-accent' : 'text-text-muted')}
+                aria-hidden
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-semibold text-text">
+                  {t(`notifications.audience.${mode}.title`, { units: unitPlural })}
+                </span>
+                <span className="block text-xs text-text-muted">
+                  {t(`notifications.audience.${mode}.hint`, { units: unitPlural })}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
-
-      <p className="text-sm text-text-muted">{t(`notifications.compose.modeHint.${rule.mode}`)}</p>
 
       {error ? (
         <p role="alert" className="text-sm text-danger">
           {t(`notifications.compose.errors.${error}`, {
-            max:
-              error.startsWith('ROLES')
-                ? AUDIENCE_LIMITS.roles
+            max: error.startsWith('ROLES')
+              ? AUDIENCE_LIMITS.roles
+              : error.startsWith('NODES')
+                ? AUDIENCE_LIMITS.nodeIds
                 : error.startsWith('FLATS')
                   ? AUDIENCE_LIMITS.flatIds
                   : AUDIENCE_LIMITS.blockIds,
@@ -142,9 +108,16 @@ export function AudienceBuilder({
         </p>
       ) : null}
 
-      {rule.mode === 'ROLES' || rule.mode === 'ALL_EXCEPT' ? (
-        <div className="flex flex-wrap gap-3 rounded-md border border-border p-3">
-          {USER_ROLES.map((role) => (
+      {rule.mode === 'NODES' ? (
+        <PropertyPicker
+          selected={rule.nodeIds ?? []}
+          onChange={(nodeIds) => onChange({ ...rule, nodeIds })}
+        />
+      ) : null}
+
+      {rule.mode === 'ROLES' ? (
+        <div className="flex flex-wrap gap-4 rounded-md border border-border p-3">
+          {ADDRESSABLE_ROLES.map((role) => (
             <label key={role} className="flex cursor-pointer items-center gap-2 text-sm text-text">
               <Checkbox
                 checked={selectedRoles.has(role)}
@@ -154,92 +127,6 @@ export function AudienceBuilder({
               {t(`role.${role}`)}
             </label>
           ))}
-        </div>
-      ) : null}
-
-      {rule.mode === 'BLOCKS' ? (
-        <div className="space-y-2 rounded-md border border-border p-3">
-          {(blocks.data ?? []).map((block) => (
-            <label key={block.id} className="flex cursor-pointer items-center gap-2 text-sm text-text">
-              <Checkbox
-                checked={selectedBlocks.has(block.id)}
-                onCheckedChange={() => toggleBlock(block.id)}
-                aria-label={block.name}
-              />
-              {block.name}
-              <span className="text-xs text-text-muted">
-                {t('township.node.childCount', {
-                  count: block.childCount,
-                  level: nom.singular(1),
-                  levels: nom.plural(1),
-                })}
-              </span>
-            </label>
-          ))}
-          {selectedBlocks.size > 0 ? (
-            <Badge tone="primary">
-              {t('notifications.compose.blocksSelected', { count: selectedBlocks.size })}
-            </Badge>
-          ) : null}
-        </div>
-      ) : null}
-
-      {rule.mode === 'FLATS' ? (
-        <div className="space-y-3 rounded-md border border-border p-3">
-          <div className="flex items-center gap-2">
-            <Input
-              value={flatSearch}
-              onChange={(e) => onFlatSearchChange(e.target.value)}
-              placeholder="101"
-              aria-label={t('common.search')}
-              className="h-8 w-40"
-            />
-            {selectedFlats.size > 0 ? (
-              <Badge tone="primary">
-                {t('notifications.compose.flatsSelected', { count: selectedFlats.size })}
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="max-h-72 space-y-3 overflow-y-auto">
-            {[...flatsByBlock.entries()].map(([blockId, group]) => {
-              const ids = group.flats.map((f) => f.id);
-              const allSelected = ids.length > 0 && ids.every((id) => selectedFlats.has(id));
-              return (
-                <div key={blockId} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                      {group.name}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => toggleBlockOfFlats(ids)}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      {allSelected
-                        ? t('common.clear')
-                        : t('notifications.compose.selectAllInBlock', { block: group.name })}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
-                    {group.flats.map((flat) => (
-                      <label
-                        key={flat.id}
-                        className="flex cursor-pointer items-center gap-1.5 text-sm text-text"
-                      >
-                        <Checkbox
-                          checked={selectedFlats.has(flat.id)}
-                          onCheckedChange={() => toggleFlat(flat.id)}
-                          aria-label={flat.number}
-                        />
-                        {flat.number}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       ) : null}
     </div>

@@ -72,6 +72,28 @@ public interface VisitorLogRepository extends JpaRepository<VisitorLog, UUID>,
 
     Page<VisitorLog> findByGate_IdOrderByCreatedAtDesc(UUID gateId, Pageable pageable);
 
+    /** A household's own visit history -- every visit routed to the unit, newest first. */
+    Page<VisitorLog> findByTargetUnit_IdOrderByCreatedAtDesc(UUID unitId, Pageable pageable);
+
+    /** A sales agent's history -- visits routed to them personally. */
+    Page<VisitorLog> findByApprover_IdAndApproverKindOrderByCreatedAtDesc(UUID approverId,
+                                                                         ApproverKind kind,
+                                                                         Pageable pageable);
+
+    /**
+     * Inside, past the expected exit, not yet alerted -- the overstay sweep's work list. Platform
+     * wide by design, like the expiry sweep: it acts on a time predicate, not on caller input.
+     */
+    @Query("""
+           select v from VisitorLog v
+            where v.status = :inside
+              and v.expectedOutAt is not null
+              and v.expectedOutAt < :now
+              and v.overstayAlertedAt is null
+           """)
+    List<VisitorLog> findNewlyOverstaying(@Param("inside") VisitStatus inside,
+                                          @Param("now") OffsetDateTime now);
+
     /**
      * Expiry sweep. A single set-based statement rather than load-modify-save: it is idempotent,
      * touches only rows that are genuinely stale, and cannot interleave badly with a live decision

@@ -2,6 +2,8 @@ package com.gatecrash.pass;
 
 import com.gatecrash.common.PageResponse;
 import com.gatecrash.pass.dto.PassDtos.CreatePassRequest;
+import com.gatecrash.pass.dto.PassDtos.LookupPassRequest;
+import com.gatecrash.pass.dto.PassDtos.PassPreviewResponse;
 import com.gatecrash.pass.dto.PassDtos.CreatePassResponse;
 import com.gatecrash.pass.dto.PassDtos.PassResponse;
 import com.gatecrash.pass.dto.PassDtos.RedeemPassRequest;
@@ -45,6 +47,12 @@ public class PassController {
     public PageResponse<PassResponse> mine(
             @PageableDefault(size = 25, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return passes.listMine(pageable);
+    }
+
+    @PostMapping("/lookup")
+    @Operation(summary = "Guard scans a QR or types a PIN: the pass's details, pre-filled, without using it")
+    public PassPreviewResponse lookup(@Valid @RequestBody LookupPassRequest request) {
+        return passes.lookup(request);
     }
 
     @PostMapping("/redeem")

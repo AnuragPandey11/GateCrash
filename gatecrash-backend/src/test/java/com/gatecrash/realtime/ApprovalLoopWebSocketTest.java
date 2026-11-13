@@ -117,7 +117,7 @@ class ApprovalLoopWebSocketTest {
         session.subscribe("/topic/gate/" + gate.getId(), collector(received));
 
         VisitResponse visit = asUser(guard, () -> visitService.createVisit(new CreateVisitRequest(
-                gate.getId(), VisitorType.GUEST, "Ravi Kumar", null, null, null, flat.getId(), null)));
+                gate.getId(), VisitorType.GUEST, "Ravi Kumar", null, null, null, flat.getId(), false, null, null, null)));
 
         asUser(resident, () -> visitService.decide(visit.id(), Decision.APPROVED));
 
@@ -135,7 +135,7 @@ class ApprovalLoopWebSocketTest {
         session.subscribe("/user/queue/visits", collector(received));
 
         VisitResponse visit = asUser(guard, () -> visitService.createVisit(new CreateVisitRequest(
-                gate.getId(), VisitorType.GUEST, "Ravi Kumar", null, null, null, flat.getId(), null)));
+                gate.getId(), VisitorType.GUEST, "Ravi Kumar", null, null, null, flat.getId(), false, null, null, null)));
 
         JsonNode frame = received.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         assertThat(frame.get("type").asText()).isEqualTo(RealtimeEvents.VISIT_REQUESTED);

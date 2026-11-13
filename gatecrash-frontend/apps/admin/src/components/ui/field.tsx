@@ -32,7 +32,7 @@ export function Field({ label, hint, error, required, className, children }: Fie
 
   return (
     <div className={cn('space-y-1.5', className)}>
-      <Label htmlFor={id} className="block text-sm font-medium text-text">
+      <Label htmlFor={id} className="block text-[0.8125rem] font-semibold tracking-[0.005em] text-text">
         {label}
         {required ? <span className="ml-0.5 text-danger">*</span> : null}
       </Label>

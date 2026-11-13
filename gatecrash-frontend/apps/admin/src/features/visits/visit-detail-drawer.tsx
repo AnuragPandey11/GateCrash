@@ -32,17 +32,17 @@ export function VisitDetailDrawer({
   return (
     <Dialog.Root open={Boolean(visitId)} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-fade-in" />
-        <Dialog.Content className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-xl data-[state=open]:animate-slide-in-right">
-          <div className="flex items-center justify-between border-b border-border p-4">
-            <Dialog.Title className="font-semibold text-text">{t('visits.detail.title')}</Dialog.Title>
-            <Dialog.Close className="rounded-sm text-text-muted hover:text-text">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[hsl(226_40%_6%/0.45)] backdrop-blur-sm data-[state=open]:animate-fade-in" />
+        <Dialog.Content className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-overlay data-[state=open]:animate-drawer-in">
+          <div className="flex items-center justify-between border-b border-border px-6 py-5">
+            <Dialog.Title className="font-display text-xl text-text">{t('visits.detail.title')}</Dialog.Title>
+            <Dialog.Close className="rounded-full p-1.5 text-text-muted transition-colors hover:bg-surface-raised hover:text-text">
               <X className="size-4" />
               <span className="sr-only">{t('common.close')}</span>
             </Dialog.Close>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-6">
             {isPending ? <LoadingState /> : null}
 
             {isError ? (
@@ -83,8 +83,16 @@ export function VisitDetailDrawer({
                   </Row>
                   <Row label={t('visits.detail.gate')}>{visit.gateName}</Row>
                   <Row label={t('visits.detail.flat')}>{visit.targetFlatNumber ?? '—'}</Row>
+                  <Row label={t('visits.detail.meetSalesAgent')}>
+                    {visit.meetSalesAgent ? t('common.yes') : t('common.no')}
+                  </Row>
                   <Row label={t('visits.detail.approver')}>
-                    {visit.approverName ?? (visit.approverKind ? t(`role.${visit.approverKind}`) : '—')}
+                    {visit.approverName ??
+                      (visit.approverKind === 'SALES'
+                        ? t('visits.salesAgent')
+                        : visit.approverKind === 'RESIDENT'
+                          ? t('role.RESIDENT')
+                          : '—')}
                   </Row>
                   <Row label={t('visits.detail.loggedBy')}>{visit.loggedByName}</Row>
                   {visit.preApprovalId ? (

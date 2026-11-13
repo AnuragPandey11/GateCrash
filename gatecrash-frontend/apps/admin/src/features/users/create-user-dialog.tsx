@@ -5,13 +5,14 @@ import {
   type CreateUserRequest,
   type CreatedUserResponse,
 } from '@gatecrash/api';
-import { PROVISIONABLE_ROLES, type UserRole } from '@gatecrash/core';
+import { PROVISIONABLE_ROLES, canBeSales, type UserRole } from '@gatecrash/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -62,11 +63,13 @@ export function CreateUserDialog({
 
   const form = useForm<CreateUserRequest>({
     resolver: zodResolver(createUserRequestSchema),
-    defaultValues: { role: 'RESIDENT', fullName: '', loginId: '', phone: '', email: '' },
+    defaultValues: { role: 'RESIDENT', fullName: '', loginId: '', phone: '', email: '', sales: false },
   });
 
   const role = form.watch('role');
   const isResident = role === 'RESIDENT';
+  const salesAllowed = canBeSales(role);
+  const sales = form.watch('sales') ?? false;
 
   const flatsByBlock = useMemo(() => {
     const groups = new Map<string, { name: string; flats: { id: string; number: string }[] }>();
@@ -89,6 +92,8 @@ export function CreateUserDialog({
         ...(isResident ? { flatId: values.flatId } : { loginId: values.loginId?.trim() }),
         ...(values.phone ? { phone: values.phone.trim() } : {}),
         ...(values.email ? { email: values.email.trim() } : {}),
+        // Only ever sent as true, and only for a role allowed to carry it.
+        ...(canBeSales(values.role) && values.sales ? { sales: true } : {}),
       });
       form.reset();
       onOpenChange(false);
@@ -118,7 +123,11 @@ export function CreateUserDialog({
             {(props) => (
               <Select
                 value={role}
-                onValueChange={(value) => form.setValue('role', value as UserRole)}
+                onValueChange={(value) => {
+                  form.setValue('role', value as UserRole);
+                  // A resident cannot be on the sales team; clear the tick rather than send it.
+                  if (!canBeSales(value as UserRole)) form.setValue('sales', false);
+                }}
               >
                 <SelectTrigger {...props}>
                   <SelectValue />
@@ -198,6 +207,13 @@ export function CreateUserDialog({
             </Field>
           </div>
 
+          {salesAllowed ? (
+            <SalesCheckbox
+              checked={sales}
+              onCheckedChange={(checked) => form.setValue('sales', checked)}
+            />
+          ) : null}
+
           <DialogFooter>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               {t('common.cancel')}
@@ -210,5 +226,34 @@ export function CreateUserDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The "Is Sales" tick-box. Sales is not a role: it marks an admin or guard account as part of the
+ * sales team, which is what lets them go on duty and be the person a "Meet Sales Agent" visitor
+ * is routed to.
+ */
+export function SalesCheckbox({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        aria-label={t('users.form.isSales')}
+        className="mt-0.5"
+      />
+      <span className="space-y-0.5">
+        <span className="block text-sm font-medium text-text">{t('users.form.isSales')}</span>
+        <span className="block text-xs text-text-muted">{t('users.form.isSalesHint')}</span>
+      </span>
+    </label>
   );
 }

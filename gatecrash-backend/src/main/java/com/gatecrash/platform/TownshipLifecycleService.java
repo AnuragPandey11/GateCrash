@@ -156,7 +156,7 @@ public class TownshipLifecycleService {
     private CreatedUserResponse provisionAdmin(Township township, TownshipAdminRequest request) {
         CreateUserRequest adminRequest = new CreateUserRequest(
                 UserRole.ADMIN, null, request.loginId(), request.fullName(),
-                request.phone(), request.email());
+                request.phone(), request.email(), false);
         return TenantContext.callAs(township.getId(), () -> provisioning.createUser(adminRequest));
     }
 

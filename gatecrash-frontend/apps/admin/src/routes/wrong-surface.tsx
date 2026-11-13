@@ -14,10 +14,12 @@ export function WrongSurfaceRoute() {
   const { t } = useTranslation();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-4">
-      <div className="max-w-sm space-y-4 text-center">
-        <Smartphone className="mx-auto size-8 text-text-muted" aria-hidden />
-        <h1 className="text-lg font-semibold text-text">{t('login.wrongSurfaceTitle')}</h1>
+    <div className="midnight-panel flex min-h-screen items-center justify-center p-4">
+      <div className="max-w-sm space-y-4 rounded-lg border border-border/80 bg-surface p-8 text-center shadow-overlay animate-enter">
+        <span className="mx-auto flex size-14 items-center justify-center rounded-full border border-accent/30 bg-accent-soft text-accent">
+          <Smartphone className="size-6" aria-hidden />
+        </span>
+        <h1 className="font-display text-2xl text-text">{t('login.wrongSurfaceTitle')}</h1>
         <p className="text-sm text-text-muted">{t('login.wrongSurfaceBody')}</p>
         <Button variant="secondary" onClick={() => void signOut()}>
           {t('common.signOut')}

@@ -21,7 +21,7 @@ export const DialogContent = forwardRef<
   }
 >(({ className, children, mandatory = false, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] data-[state=open]:animate-fade-in" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[hsl(226_40%_6%/0.55)] backdrop-blur-sm data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in" />
     <DialogPrimitive.Content
       ref={ref}
       onEscapeKeyDown={mandatory ? (e) => e.preventDefault() : undefined}
@@ -36,16 +36,19 @@ export const DialogContent = forwardRef<
         // flex-col rather than grid so a DialogBody can claim the leftover height and scroll on
         // its own, keeping the title and the action buttons pinned. Dialogs that do not use
         // DialogBody still scroll as a whole here, so none of them can trap their own footer.
-        'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg',
-        '-translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-lg border',
-        'border-border bg-surface p-6 shadow-xl data-[state=open]:animate-fade-in',
+        'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg',
+        '-translate-x-1/2 -translate-y-1/2 flex-col gap-5 overflow-y-auto rounded-lg border',
+        'border-border/80 bg-surface p-7 shadow-overlay data-[state=open]:animate-scale-in',
+        // An accent hairline across the top edge: the one flourish every dialog shares.
+        'before:pointer-events-none before:absolute before:inset-x-8 before:top-0 before:h-px',
+        'before:bg-gradient-to-r before:from-transparent before:via-accent/70 before:to-transparent',
         className,
       )}
       {...props}
     >
       {children}
       {mandatory ? null : (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-text-muted transition-colors hover:text-text">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 text-text-muted transition-colors hover:bg-surface-raised hover:text-text">
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -70,7 +73,7 @@ export function DialogBody({ className, ...props }: ComponentPropsWithoutRef<'di
   return (
     <div
       data-slot="dialog-body"
-      className={cn('-mx-6 min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-1', className)}
+      className={cn('-mx-7 min-h-0 flex-1 space-y-3 overflow-y-auto px-7 py-1', className)}
       {...props}
     />
   );
@@ -91,7 +94,7 @@ export const DialogTitle = forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold text-text', className)}
+    className={cn('font-display text-[1.375rem] leading-tight text-text', className)}
     {...props}
   />
 ));

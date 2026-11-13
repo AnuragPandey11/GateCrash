@@ -1,46 +1,46 @@
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useThemeStore, type Theme } from '@/lib/theme';
+import { cn } from '@/lib/cn';
+import { useThemeStore } from '@/lib/theme';
 import { Button } from './ui/button';
 
-const ICONS = { light: Sun, dark: Moon, system: Monitor } as const;
-
-export function ThemeToggle() {
+/**
+ * One button, one flip: light ↔ dark on every click.
+ *
+ * Both icons are always rendered and cross-fade with a quarter turn, so the switch reads as a
+ * single motion rather than one glyph popping into another's place. The label names the theme the
+ * click will switch *to*, which is what a screen-reader user needs to decide whether to press it.
+ */
+export function ThemeToggle({ className }: { className?: string }) {
   const { t } = useTranslation();
-  const theme = useThemeStore((s) => s.theme);
-  const setTheme = useThemeStore((s) => s.setTheme);
-  const Icon = ICONS[theme];
+  const dark = useThemeStore((s) => s.dark);
+  const toggle = useThemeStore((s) => s.toggle);
+  const label = dark ? t('common.theme.switchToLight') : t('common.theme.switchToDark');
 
   return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t('common.theme.toggle')}>
-          <Icon />
-        </Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={6}
-          className="z-50 min-w-36 rounded-md border border-border bg-surface p-1 shadow-lg"
-        >
-          {(['light', 'dark', 'system'] as Theme[]).map((option) => {
-            const OptionIcon = ICONS[option];
-            return (
-              <DropdownMenu.Item
-                key={option}
-                onSelect={() => setTheme(option)}
-                className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-text outline-none data-[highlighted]:bg-surface-raised"
-              >
-                <OptionIcon className="size-4" aria-hidden />
-                {t(`common.theme.${option}`)}
-                {theme === option ? <span className="ml-auto text-xs text-text-muted">●</span> : null}
-              </DropdownMenu.Item>
-            );
-          })}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      title={label}
+      aria-pressed={dark}
+      onClick={toggle}
+      className={cn('relative overflow-hidden', className)}
+    >
+      <Sun
+        aria-hidden
+        className={cn(
+          'absolute transition-all duration-500 ease-out-expo',
+          dark ? 'rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100',
+        )}
+      />
+      <Moon
+        aria-hidden
+        className={cn(
+          'absolute transition-all duration-500 ease-out-expo',
+          dark ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-50 opacity-0',
+        )}
+      />
+    </Button>
   );
 }

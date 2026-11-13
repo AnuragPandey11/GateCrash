@@ -100,15 +100,15 @@ export function ChangePasswordRoute() {
   const submitting = form.formState.isSubmitting;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="midnight-panel flex min-h-screen items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-6 animate-enter">
         <form
           onSubmit={onSubmit}
-          className="space-y-4 rounded-lg border border-border bg-surface p-6"
+          className="relative space-y-5 rounded-lg border border-border/80 bg-surface p-8 shadow-overlay before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/70 before:to-transparent"
           noValidate
         >
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold text-text">{t('changePassword.title')}</h1>
+            <h1 className="font-display text-[1.75rem] leading-tight text-text">{t('changePassword.title')}</h1>
             {forced ? (
               <p className="text-sm text-text-muted">{t('changePassword.forcedSubtitle')}</p>
             ) : null}
@@ -182,7 +182,7 @@ export function ChangePasswordRoute() {
             )}
           </Field>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
             {submitting ? <Loader2 className="animate-spin" aria-hidden /> : null}
             {submitting ? t('changePassword.submitting') : t('changePassword.submit')}
           </Button>

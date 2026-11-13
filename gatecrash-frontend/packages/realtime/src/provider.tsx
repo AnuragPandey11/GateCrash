@@ -44,6 +44,8 @@ export interface RealtimeProviderProps {
   /** GUARD: the gate this device stands at. ADMIN: gates the current screen watches. */
   selectedGateId?: GateId | null;
   watchedGateIds?: readonly GateId[];
+  /** The account is on the sales team: adds the personal visit queue to its subscriptions. */
+  sales?: boolean;
   /** Non-cache side effects: the occupancy toast, the guard's haptic and tone. */
   onEvent?: (frame: RealtimeFrame) => void;
   children: ReactNode;
@@ -57,6 +59,7 @@ export function RealtimeProvider({
   townshipId = null,
   selectedGateId = null,
   watchedGateIds,
+  sales = false,
   onEvent,
   children,
 }: RealtimeProviderProps) {
@@ -97,6 +100,7 @@ export function RealtimeProvider({
       townshipId,
       selectedGateId,
       watchedGateIds: watchedGateIds ?? [],
+      sales,
     });
     return () => client.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,9 +110,9 @@ export function RealtimeProvider({
   // township in the console is exactly this path: same connection, different occupancy topic.
   useEffect(() => {
     if (!role) return;
-    client.updateContext({ townshipId, selectedGateId, watchedGateIds: watchedGateIds ?? [] });
+    client.updateContext({ townshipId, selectedGateId, watchedGateIds: watchedGateIds ?? [], sales });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, role, townshipId, selectedGateId, gateKey]);
+  }, [client, role, townshipId, selectedGateId, gateKey, sales]);
 
   // The other half of guardrail #7: window focus reconciles even if the socket never dropped.
   useEffect(() => {

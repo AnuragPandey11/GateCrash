@@ -5,7 +5,9 @@ import SockJS from 'sockjs-client';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toaster } from '@/components/toaster';
+import { play } from '@/lib/chime';
 import { API_URL } from '@/lib/env';
+import { useGateStore } from '@/lib/gate';
 import { apiClient, queryClient, sessionManager, useSessionStore } from '@/lib/session';
 import { toast } from '@/lib/toast';
 import { AppRoutes } from '@/routes';
@@ -30,20 +32,67 @@ export function App() {
     s.state === 'authenticated' ? ((s.actingTownshipId as never) ?? null) : null,
   );
 
+  // The account's sales flag adds its personal visit queue; a guard's chosen gate is its topic.
+  const sales = useSessionStore((s) => s.me?.sales ?? false);
+  const gateId = useGateStore((s) => s.gateId);
+
   const onEvent = useCallback(
     (frame: RealtimeFrame) => {
-      // §8.3: a subtle, auto-dismissing toast with entry/exit direction, capped at 3 stacked.
-      if (frame.type !== 'OCCUPANCY_CHANGED') return;
-      const entering = frame.status === 'CHECKED_IN';
-      toast.show({
-        title: t(entering ? 'occupancy.entered' : 'occupancy.left', {
-          name: frame.visitorName,
-          gate: frame.gateName,
-        }),
-        tone: entering ? 'info' : 'default',
-        group: 'occupancy',
-        durationMs: 3_000,
-      });
+      const role = useSessionStore.getState().me?.role;
+      switch (frame.type) {
+        case 'OCCUPANCY_CHANGED': {
+          // §8.3: a subtle, auto-dismissing toast with entry/exit direction, capped at 3 stacked.
+          const entering = frame.status === 'CHECKED_IN';
+          toast.show({
+            title: t(entering ? 'occupancy.entered' : 'occupancy.left', {
+              name: frame.visitorName,
+              gate: frame.gateName,
+            }),
+            tone: entering ? 'info' : 'default',
+            group: 'occupancy',
+            durationMs: 3_000,
+          });
+          break;
+        }
+        case 'VISIT_REQUESTED': {
+          // Resident or sales agent: someone is at the gate for them. The card is on Home already
+          // (the dispatcher refreshed it); this makes sure they notice.
+          play('doorbell');
+          toast.show({
+            title: t('portal.alerts.atGate', { name: frame.visitorName, gate: frame.gateName }),
+            tone: 'info',
+            durationMs: 8_000,
+          });
+          break;
+        }
+        case 'OVERSTAY_ALERT': {
+          if (role === 'GUARD') play('alarm');
+          toast.show({
+            title: t('portal.alerts.overstay', { name: frame.visitorName }),
+            description:
+              role === 'RESIDENT'
+                ? t('portal.alerts.overstayResident')
+                : t('portal.alerts.overstayGuard', { unit: frame.flatNumber ?? '—' }),
+            tone: 'danger',
+            durationMs: 12_000,
+          });
+          break;
+        }
+        case 'VISIT_EXTENDED': {
+          toast.show({
+            title: t('portal.alerts.extended', { name: frame.visitorName, by: frame.extendedByName ?? '' }),
+            tone: 'info',
+            durationMs: 6_000,
+          });
+          break;
+        }
+        case 'SERVICE_UPDATE': {
+          toast.show({ title: frame.title, description: frame.body ?? undefined, tone: 'info', durationMs: 7_000 });
+          break;
+        }
+        default:
+          break;
+      }
     },
     [t],
   );
@@ -56,6 +105,8 @@ export function App() {
         refreshAccessToken={() => sessionManager.refreshOnce()}
         role={role}
         townshipId={townshipId}
+        selectedGateId={role === 'GUARD' ? (gateId as never) : null}
+        sales={sales}
         onEvent={onEvent}
       >
         <BrowserRouter>

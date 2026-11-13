@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/app-shell';
 import { Pagination } from '@/components/pagination';
-import { VisitStatusBadge, VisitorTypeBadge } from '@/components/status-badge';
+import { MeetSalesBadge, VisitStatusBadge, VisitorTypeBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -117,6 +117,7 @@ export function VisitsRoute() {
   return (
     <>
       <PageHeader
+        eyebrow={t('pageEyebrow.security')}
         title={t('visits.title')}
         description={t('visits.subtitle')}
         actions={
@@ -135,7 +136,7 @@ export function VisitsRoute() {
       />
 
       <Card className="mb-4 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <Field label={t('visits.filters.status')}>
             {(props) => (
               <Select
@@ -173,6 +174,26 @@ export function VisitsRoute() {
                       {t(`status.visitorType.${type}`)}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            )}
+          </Field>
+
+          <Field label={t('visits.filters.meetSalesAgent')}>
+            {(props) => (
+              <Select
+                value={filters.meetSalesAgent == null ? ANY_VALUE : String(filters.meetSalesAgent)}
+                onValueChange={(v) =>
+                  setFilter('meetSalesAgent', v === ANY_VALUE ? null : v === 'true')
+                }
+              >
+                <SelectTrigger {...props}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY_VALUE}>{t('common.all')}</SelectItem>
+                  <SelectItem value="true">{t('visits.filters.metSales')}</SelectItem>
+                  <SelectItem value="false">{t('visits.filters.didNotMeetSales')}</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -337,7 +358,10 @@ function VisitRow({ visit, onOpen }: { visit: VisitResponse; onOpen: () => void 
         ) : null}
       </TD>
       <TD>
-        <VisitorTypeBadge type={visit.visitorType} />
+        <div className="flex flex-wrap gap-1">
+          <VisitorTypeBadge type={visit.visitorType} />
+          {visit.meetSalesAgent ? <MeetSalesBadge /> : null}
+        </div>
       </TD>
       <TD className="whitespace-nowrap">{visit.gateName}</TD>
       <TD className="whitespace-nowrap">{visit.targetFlatNumber ?? visit.approverName ?? '—'}</TD>

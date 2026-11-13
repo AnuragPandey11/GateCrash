@@ -26,8 +26,36 @@ export function visitEndpoints(client: ApiClient) {
      * `RESIDENT`/`SALES`. A `409` here is a *normal* outcome, not a crash: any resident of the
      * flat may decide, so racing a flat-mate is expected (§11.2).
      */
-    async decide(id: VisitId, decision: Decision): Promise<VisitResponse> {
-      return parseVisit(await client.patch<unknown>(`visits/${id}/decision`, { json: { decision } }));
+    async decide(id: VisitId, decision: Decision, expectedDurationMinutes?: number): Promise<VisitResponse> {
+      return parseVisit(
+        await client.patch<unknown>(`visits/${id}/decision`, {
+          json: expectedDurationMinutes ? { decision, expectedDurationMinutes } : { decision },
+        }),
+      );
+    },
+
+    /** RESIDENT/SALES — the household's (or agent's) visit history, newest first. */
+    async mine(page: PageArgs, signal?: AbortSignal): Promise<PageResponse<VisitResponse>> {
+      const raw = await client.get<PageResponse<unknown>>('visits/mine', {
+        searchParams: toPageParams(page),
+        ...(signal ? { signal } : {}),
+      });
+      return { ...raw, content: raw.content.map(parseVisit) };
+    },
+
+    /** The host extends a stay; clears an overstay alert and tells the gate. */
+    async extendStay(id: VisitId, extendMinutes: number): Promise<VisitResponse> {
+      return parseVisit(await client.patch<unknown>(`visits/${id}/stay`, { json: { extendMinutes } }));
+    },
+
+    /** RESIDENT — a fresh Leave-at-Gate collection code; the previous one stops working. */
+    collectionCode(id: VisitId): Promise<{ visitId: VisitId; code: string }> {
+      return client.post<{ visitId: VisitId; code: string }>(`visits/${id}/collection-code`);
+    },
+
+    /** GUARD — hand a parcel over against the resident's code. */
+    async collect(id: VisitId, code: string): Promise<VisitResponse> {
+      return parseVisit(await client.post<unknown>(`visits/${id}/collect`, { json: { code } }));
     },
 
     async checkIn(id: VisitId): Promise<VisitResponse> {

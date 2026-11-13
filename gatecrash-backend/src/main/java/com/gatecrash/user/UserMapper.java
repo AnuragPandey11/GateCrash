@@ -23,6 +23,7 @@ public class UserMapper {
                 user.getTownshipId(),
                 user.getFullName(),
                 user.getRole(),
+                user.isSales(),
                 user.getPhone(),
                 user.getEmail(),
                 user.isActive(),

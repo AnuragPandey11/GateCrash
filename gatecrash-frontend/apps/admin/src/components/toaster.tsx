@@ -37,7 +37,7 @@ function ToastCard({ toast }: { toast: Toast }) {
       // an occupancy toast does not talk over what the admin is reading.
       role={toast.tone === 'danger' ? 'alert' : 'status'}
       className={cn(
-        'pointer-events-auto flex w-80 items-start gap-3 rounded-md border bg-surface p-3 shadow-lg animate-slide-in-right',
+        'pointer-events-auto relative flex w-[22rem] items-start gap-3 overflow-hidden rounded-[14px] border bg-surface/95 p-4 shadow-overlay backdrop-blur-md animate-slide-in-right',
         tone.border,
       )}
     >

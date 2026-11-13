@@ -10,8 +10,17 @@ import { USER_ROLES, type UserRole } from './enums';
  * never by anything this file returns.
  */
 
-/** Roles whose home is the admin web app. Everyone else gets the mobile app. */
-export function usesAdminWeb(role: UserRole): boolean {
+/**
+ * Every role has a home in the web portal now: admins get the console, guards the gate console,
+ * residents their household portal. Kept as a function so a role that should *not* sign in on the
+ * web can be excluded in one place later.
+ */
+export function usesAdminWeb(_role: UserRole): boolean {
+  return true;
+}
+
+/** The township office: the admin console's screens. */
+export function isOffice(role: UserRole): boolean {
   return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
@@ -57,20 +66,23 @@ export const PROVISIONABLE_ROLES = USER_ROLES.filter(
 ) as readonly UserRole[];
 
 /**
- * `CommunityService` authorises `ADMIN, RESIDENT, SALES` — guards deliberately have no reading
- * surface at the gate (§1). Flagged in §15.6 as worth confirming with product.
+ * `CommunityService` authorises `ADMIN, RESIDENT` and the sales team — guards deliberately have no
+ * reading surface at the gate (§1). Flagged in §15.6 as worth confirming with product.
  */
 export function hasCommunityFeed(role: UserRole): boolean {
   return role !== 'GUARD';
 }
 
-/** Only these two roles are ever routed a visit for decision. */
-export function canApproveVisits(role: UserRole): boolean {
-  return role === 'RESIDENT' || role === 'SALES';
+/**
+ * Visits are routed to residents (by unit) and to the sales team (by agent). Sales is a flag on a
+ * staff account, not a role, so the caller passes it alongside the role.
+ */
+export function canApproveVisits(role: UserRole, sales = false): boolean {
+  return role === 'RESIDENT' || sales;
 }
 
-export function canMintPasses(role: UserRole): boolean {
-  return role === 'RESIDENT' || role === 'SALES';
+export function canMintPasses(role: UserRole, sales = false): boolean {
+  return role === 'RESIDENT' || sales;
 }
 
 /** Gate-side operations: logging a walk-in, redeeming a pass, check-in/out. */

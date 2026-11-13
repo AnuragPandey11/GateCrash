@@ -60,11 +60,12 @@ public class AdminUserController {
     @Operation(summary = "List accounts")
     public PageResponse<UserResponse> list(
             @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) Boolean sales,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) UUID flatId,
             @RequestParam(required = false) @Size(max = 100) String search,
             @PageableDefault(size = 25, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return userService.list(role, active, flatId, search, pageable);
+        return userService.list(role, sales, active, flatId, search, pageable);
     }
 
     @GetMapping("/{id}")

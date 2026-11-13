@@ -58,7 +58,8 @@ export function TownshipRoute() {
   if (nom.isPending) {
     return (
       <>
-        <PageHeader title={t('township.title')} description={t('township.subtitle')} />
+        <PageHeader
+        eyebrow={t('pageEyebrow.property')} title={t('township.title')} description={t('township.subtitle')} />
         <Card>
           <LoadingState />
         </Card>
@@ -69,7 +70,8 @@ export function TownshipRoute() {
   if (nom.isError) {
     return (
       <>
-        <PageHeader title={t('township.title')} description={t('township.subtitle')} />
+        <PageHeader
+        eyebrow={t('pageEyebrow.property')} title={t('township.title')} description={t('township.subtitle')} />
         <Card>
           <ErrorState message={errorMessage(nom.error, t)} onRetry={() => void nom.refetch()} />
         </Card>
@@ -81,7 +83,8 @@ export function TownshipRoute() {
 
   return (
     <>
-      <PageHeader title={t('township.title')} description={t('township.subtitle')} />
+      <PageHeader
+        eyebrow={t('pageEyebrow.property')} title={t('township.title')} description={t('township.subtitle')} />
       <Tabs.Root defaultValue={firstTab}>
         <Tabs.List className="mb-4 flex flex-wrap gap-1 border-b border-border">
           {nom.levels.map((level) => (

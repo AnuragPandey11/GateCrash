@@ -99,7 +99,15 @@ public class AppUser {
     @JoinColumn(name = "flat_id")
     private PropertyNode unit;
 
-    /** SALES presence, drives the guard's on-duty dropdown. */
+    /**
+     * Member of the sales team. Not a role: a sales agent is an ADMIN or GUARD account with this
+     * flag set, enforced by the {@code sales_is_staff} check constraint. It is what confers the
+     * {@code ROLE_SALES} authority -- see {@code AppUserDetails#getAuthorities}.
+     */
+    @Column(name = "is_sales", nullable = false)
+    private boolean sales = false;
+
+    /** Sales presence, drives the guard's on-duty dropdown. Only ever true when {@link #sales} is. */
     @Column(name = "is_on_duty", nullable = false)
     private boolean onDuty = false;
 

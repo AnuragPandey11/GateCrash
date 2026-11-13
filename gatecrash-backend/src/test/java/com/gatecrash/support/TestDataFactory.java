@@ -66,6 +66,9 @@ public class TestDataFactory {
     public void reset() {
         jdbcTemplate.execute("""
                 TRUNCATE TABLE audit_log, notification_recipient, notification, community_post,
+                               ticket_message, support_ticket, amenity_booking, amenity,
+                               move_request, invoice, staff_rating, staff_attendance,
+                               staff_household, staff_member, entry_rule,
                                visitor_log, pre_approval, device, refresh_token, app_user,
                                property_node, property_level, gate, township
                 RESTART IDENTITY CASCADE
@@ -264,9 +267,11 @@ public class TestDataFactory {
         return salesAgent(primaryTownship(), onDuty);
     }
 
+    /** A sales agent: since V6, a GUARD account carrying the sales flag rather than a role of its own. */
     @Transactional
     public AppUser salesAgent(Township township, boolean onDuty) {
-        AppUser agent = user(township, UserRole.SALES, "sales", null);
+        AppUser agent = user(township, UserRole.GUARD, "sales", null);
+        agent.setSales(true);
         agent.setOnDuty(onDuty);
         return users.save(agent);
     }

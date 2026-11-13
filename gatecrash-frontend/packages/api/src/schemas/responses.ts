@@ -14,6 +14,7 @@ import type {
   NotificationId,
   PassId,
   PassStatus,
+  PassType,
   PostId,
   QrToken,
   TownshipId,
@@ -68,6 +69,8 @@ export const loginResponseSchema = z.object({
   expiresInSeconds: z.number(),
   mustResetPassword: z.boolean(),
   role: userRoleSchema,
+  /** On the sales team. Absent from an older server, hence the default. */
+  sales: z.boolean().default(false),
   userId: z.string().uuid(),
   fullName: z.string(),
   // Null for a SUPER_ADMIN, which belongs to no township. The client needs all three: the id to
@@ -86,6 +89,7 @@ export const meResponseSchema = z.object({
   loginId: z.string(),
   fullName: z.string(),
   role: userRoleSchema,
+  sales: z.boolean().default(false),
   mustResetPassword: z.boolean(),
   onDuty: z.boolean(),
   flatId: nullish(z.string().uuid()),
@@ -111,6 +115,7 @@ export const visitResponseSchema = z.object({
   visitorName: z.string(),
   visitorPhone: nullish(z.string()),
   visitorType: visitorTypeSchema,
+  meetSalesAgent: z.boolean().default(false),
   vehicleNo: nullish(z.string()),
   photoUrl: nullish(z.string()),
   status: visitStatusSchema,
@@ -134,6 +139,15 @@ export const visitResponseSchema = z.object({
   decidedAt: nullish(instant),
   checkedInAt: nullish(instant),
   checkedOutAt: nullish(instant),
+  purpose: nullish(z.string()),
+  expectedDurationMinutes: nullish(z.number().int()),
+  expectedOutAt: nullish(instant),
+  overstaying: z.boolean().default(false),
+  collectedAt: nullish(instant),
+  /** Present only on the response to a Leave-at-Gate decision — the one moment it exists. */
+  collectionCode: nullish(z.string()),
+  /** Let in by one of the home's society rules, not by a resident's tap. */
+  autoApproved: z.boolean().default(false),
 });
 
 export interface VisitResponse {
@@ -143,6 +157,8 @@ export interface VisitResponse {
   visitorName: string;
   visitorPhone: string | null;
   visitorType: VisitorType;
+  /** The guard ticked "Meet Sales Agent": this visitor came to see the sales team. */
+  meetSalesAgent: boolean;
   vehicleNo: string | null;
   photoUrl: string | null;
   status: VisitStatus;
@@ -158,17 +174,28 @@ export interface VisitResponse {
   decidedAt: string | null;
   checkedInAt: string | null;
   checkedOutAt: string | null;
+  purpose: string | null;
+  /** How long the visitor expects to stay — set by the guard, the resident, or the pass. */
+  expectedDurationMinutes: number | null;
+  /** Set at check-in; the overstay alert measures against it. */
+  expectedOutAt: string | null;
+  /** Inside and past `expectedOutAt`. */
+  overstaying: boolean;
+  collectedAt: string | null;
+  collectionCode: string | null;
+  autoApproved: boolean;
 }
 
 export const redeemPassResponseSchema = z.object({
   passId: z.string().uuid(),
   visit: visitResponseSchema,
-  remainingUses: z.number().int(),
+  /** Absent for a frequent pass: unlimited inside its window. */
+  remainingUses: nullish(z.number().int()),
 });
 export interface RedeemPassResponse {
   passId: PassId;
   visit: VisitResponse;
-  remainingUses: number;
+  remainingUses: number | null;
 }
 
 // ── Trusted from the generated types (§4.2) ─────────────────────────────────────────────────
@@ -185,6 +212,8 @@ export interface UserResponse {
   townshipId: TownshipId;
   fullName: string;
   role: UserRole;
+  /** On the sales team — a flag on an ADMIN or GUARD account, not a role. */
+  sales: boolean;
   phone?: string | null;
   email?: string | null;
   active: boolean;
@@ -208,6 +237,7 @@ export interface CreatedUserResponse {
   loginId: string;
   fullName: string;
   role: UserRole;
+  sales: boolean;
   townshipId: TownshipId | null;
   generatedPassword: string;
 }
@@ -261,24 +291,55 @@ export interface SalesAgentResponse {
 /** `pin` is returned exactly once and is never retrievable again (§14.3). */
 export interface CreatePassResponse {
   id: PassId;
+  passType: PassType;
   pin: string;
   qrToken: QrToken;
   validFrom: string;
   validUntil: string;
-  maxUses: number;
+  /** Absent for a frequent pass. */
+  maxUses?: number | null;
+}
+
+/** What the guard sees after a scan, before anything is used up. */
+export interface PassPreviewResponse {
+  passId: PassId;
+  passType: PassType;
+  visitorName?: string | null;
+  visitorPhone?: string | null;
+  visitorType: VisitorType;
+  purpose?: string | null;
+  vehicleNo?: string | null;
+  hostName: string;
+  hostUnitCode?: string | null;
+  meetSalesAgent: boolean;
+  expectedArrivalAt?: string | null;
+  validFrom: string;
+  validUntil: string;
+  expectedDurationMinutes?: number | null;
+  maxUses?: number | null;
+  useCount: number;
+  redeemable: boolean;
+  /** Null when usable now; otherwise NOT_YET_VALID, EXPIRED, USES_EXHAUSTED or STATUS_<x>. */
+  problem?: string | null;
 }
 
 export interface PassResponse {
   id: PassId;
+  passType: PassType;
   visitorName?: string | null;
   visitorPhone?: string | null;
   visitorType: VisitorType;
+  purpose?: string | null;
+  vehicleNo?: string | null;
   status: PassStatus;
   pinLast4?: string | null;
   qrToken: QrToken;
+  expectedArrivalAt?: string | null;
   validFrom: string;
   validUntil: string;
-  maxUses: number;
+  expectedDurationMinutes?: number | null;
+  /** Absent for a frequent pass: unlimited inside its window. */
+  maxUses?: number | null;
   useCount: number;
   createdAt: string;
 }

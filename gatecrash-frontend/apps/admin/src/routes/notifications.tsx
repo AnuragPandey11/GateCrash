@@ -2,6 +2,7 @@ import {
   PAGE_DEFAULTS,
   useAudiencePreview,
   useNotificationHistory,
+  usePropertyNodes,
   useSendNotification,
   type PageArgs,
 } from '@gatecrash/api';
@@ -15,7 +16,7 @@ import {
   type AudienceRule,
 } from '@gatecrash/core';
 import * as Tabs from '@radix-ui/react-tabs';
-import { Loader2, Megaphone, Send } from 'lucide-react';
+import { FileText, Loader2, Megaphone, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/app-shell';
@@ -36,6 +37,7 @@ import { Input, Textarea } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { TBody, TD, TH, THead, TR, Table, TableWrap } from '@/components/ui/table';
 import { AudienceBuilder } from '@/features/notifications/audience-builder';
+import { breadcrumb, buildTree } from '@/features/notifications/node-selection';
 import { cn } from '@/lib/cn';
 import { errorMessage, toastError } from '@/lib/errors';
 import { useDebounced } from '@/lib/use-debounced';
@@ -43,6 +45,19 @@ import { toast } from '@/lib/toast';
 
 const TITLE_MAX = 200;
 const BODY_MAX = 2000;
+
+/**
+ * Starting points for the messages a township sends every month. Offered only while the form is
+ * empty, so picking one can never overwrite something the admin has already written.
+ */
+const TEMPLATES = [
+  'electricityBill',
+  'maintenanceDues',
+  'waterSupply',
+  'powerShutdown',
+  'liftMaintenance',
+  'meeting',
+] as const;
 
 /**
  * The notification composer — FRONTEND.md §8.5.
@@ -60,7 +75,8 @@ export function NotificationsRoute() {
   const { t } = useTranslation();
   return (
     <>
-      <PageHeader title={t('notifications.title')} description={t('notifications.subtitle')} />
+      <PageHeader
+        eyebrow={t('pageEyebrow.communication')} title={t('notifications.title')} description={t('notifications.subtitle')} />
       <Tabs.Root defaultValue="compose">
         <Tabs.List className="mb-4 flex gap-1 border-b border-border">
           {(['compose', 'history'] as const).map((tab) => (
@@ -92,8 +108,8 @@ function Composer() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [rule, setRule] = useState<AudienceRule>({ mode: 'ALL' });
-  const [flatSearch, setFlatSearch] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const formIsEmpty = title.trim() === '' && body.trim() === '';
 
   const ruleError = validateAudienceRule(rule);
   const normalised = useMemo(() => buildAudienceRule(rule), [rule]);
@@ -135,9 +151,33 @@ function Composer() {
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle>{t('notifications.compose.messageTitle')}</CardTitle>
+            <CardTitle>{t('notifications.compose.stepMessage')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {formIsEmpty ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                  {t('notifications.templates.heading')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {TEMPLATES.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setTitle(t(`notifications.templates.${key}.title`));
+                        setBody(t(`notifications.templates.${key}.body`));
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-text shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-accent hover:text-accent"
+                    >
+                      <FileText className="size-3.5" aria-hidden />
+                      {t(`notifications.templates.${key}.label`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <Field
               label={t('notifications.compose.messageTitle')}
               hint={<CharCount value={title} max={TITLE_MAX} />}
@@ -175,16 +215,10 @@ function Composer() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t('notifications.compose.audience')}</CardTitle>
+            <CardTitle>{t('notifications.compose.stepAudience')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <AudienceBuilder
-              rule={rule}
-              onChange={setRule}
-              error={ruleError}
-              flatSearch={flatSearch}
-              onFlatSearchChange={setFlatSearch}
-            />
+            <AudienceBuilder rule={rule} onChange={setRule} error={ruleError} />
           </CardContent>
         </Card>
       </div>
@@ -310,6 +344,11 @@ function History() {
   const { t } = useTranslation();
   const [page, setPage] = useState<PageArgs>({ page: 1, size: PAGE_DEFAULTS.notifications });
   const { data, isPending, isError, error, refetch } = useNotificationHistory(page);
+  // Shares the picker's cached query, so naming "Tower A › Floor 3" in history costs no request.
+  const nodes = usePropertyNodes({});
+  const tree = useMemo(() => buildTree(nodes.data ?? []), [nodes.data]);
+  const nodeName = (id: string) =>
+    tree.byId.has(id as never) ? breadcrumb(tree, id as never) : undefined;
 
   if (isPending) return <LoadingState />;
   if (isError && !data) {
@@ -348,7 +387,9 @@ function History() {
                     {notification.body}
                   </span>
                 </TD>
-                <TD className="text-text-muted">{describeAudienceRule(notification.audienceRule)}</TD>
+                <TD className="text-text-muted">
+                  {describeAudienceRule(notification.audienceRule, { node: nodeName })}
+                </TD>
                 <TD>
                   <NotifStatusBadge status={notification.status} />
                 </TD>

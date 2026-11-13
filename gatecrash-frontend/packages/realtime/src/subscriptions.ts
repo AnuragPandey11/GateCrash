@@ -44,6 +44,12 @@ export interface SubscriptionContext {
   watchedGateIds?: readonly GateId[];
   /** GUARD: the gate this device is standing at. Nothing is subscribed until one is picked. */
   selectedGateId?: GateId | null;
+  /**
+   * The account carries the sales flag (an ADMIN or GUARD on the sales team). Sales is not a role
+   * any more, so it adds the personal visit queue on top of whatever the role subscribes to —
+   * that is where "meet a sales agent" requests arrive.
+   */
+  sales?: boolean;
 }
 
 /** An admin's occupancy feed, or nothing at all if no township is in context yet. */
@@ -63,12 +69,16 @@ export const SUBSCRIPTIONS: Record<UserRole, (ctx: SubscriptionContext) => strin
   // asking for one would be a rejected SUBSCRIBE that kills the session.
   GUARD: (ctx) => (ctx.selectedGateId ? [topicGate(ctx.selectedGateId)] : []),
   RESIDENT: () => [USER_QUEUE_VISITS, USER_QUEUE_NOTIFICATIONS],
-  SALES: () => [USER_QUEUE_VISITS, USER_QUEUE_NOTIFICATIONS],
 };
 
 export function destinationsFor(role: UserRole, ctx: SubscriptionContext = {}): string[] {
+  const base = SUBSCRIPTIONS[role](ctx);
+  // The sales flag only means anything on a staff role; the server refuses it elsewhere.
+  const sales = ctx.sales && (role === 'ADMIN' || role === 'GUARD')
+    ? [USER_QUEUE_VISITS, USER_QUEUE_NOTIFICATIONS]
+    : [];
   // De-duplicate: an admin watching a gate twice would otherwise get every frame twice.
-  return [...new Set(SUBSCRIPTIONS[role](ctx))];
+  return [...new Set([...base, ...sales])];
 }
 
 /**

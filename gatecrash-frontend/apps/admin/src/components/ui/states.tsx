@@ -15,9 +15,29 @@ import { Button } from './button';
 export function LoadingState({ label }: { label?: string }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center justify-center gap-2 p-12 text-sm text-text-muted">
-      <Loader2 className="size-4 animate-spin" aria-hidden />
-      {label ?? t('common.loading')}
+    <div className="flex flex-col items-center justify-center gap-4 p-12 text-sm text-text-muted animate-fade-in">
+      <span className="relative flex size-10 items-center justify-center">
+        <span className="absolute inset-0 rounded-full border border-accent/20" />
+        <Loader2 className="size-5 animate-spin text-accent" aria-hidden />
+      </span>
+      <span className="tracking-wide">{label ?? t('common.loading')}</span>
+    </div>
+  );
+}
+
+/** Placeholder rows with a slow sheen, for lists whose shape is known before the data lands. */
+export function SkeletonRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 p-5" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-4">
+          <div className="skeleton size-9 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-3 w-1/3" />
+            <div className="skeleton h-3 w-2/3" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -36,9 +56,13 @@ export interface EmptyStateProps {
  */
 export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center gap-2 p-12 text-center', className)}>
-      {Icon ? <Icon className="size-8 text-text-muted" aria-hidden /> : null}
-      <p className="font-medium text-text">{title}</p>
+    <div className={cn('flex flex-col items-center gap-2 p-14 text-center animate-enter', className)}>
+      {Icon ? (
+        <span className="mb-2 flex size-14 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent shadow-soft">
+          <Icon className="size-6" aria-hidden />
+        </span>
+      ) : null}
+      <p className="font-display text-lg text-text">{title}</p>
       {description ? <p className="max-w-sm text-sm text-text-muted">{description}</p> : null}
       {action ? <div className="pt-2">{action}</div> : null}
     </div>
@@ -56,8 +80,8 @@ export function ErrorState({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col items-center gap-3 p-12 text-center">
-      <p className="font-medium text-text">{t('errors.title')}</p>
+    <div className="flex flex-col items-center gap-3 p-12 text-center animate-enter">
+      <p className="font-display text-lg text-text">{t('errors.title')}</p>
       <p className="max-w-md text-sm text-text-muted">{message}</p>
       {correlationId ? (
         <p className="font-credential text-xs text-text-muted">

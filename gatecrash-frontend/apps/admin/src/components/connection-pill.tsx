@@ -21,7 +21,7 @@ export function ConnectionPill() {
       case 'connected':
         return {
           label: t('connection.live'),
-          dot: 'bg-success',
+          dot: 'bg-success text-success animate-pulse-ring',
           className: 'border-success/30 text-success',
         };
       case 'connecting':
@@ -67,7 +67,7 @@ export function ConnectionPill() {
     <Popover.Root>
       <Popover.Trigger
         className={cn(
-          'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium',
+          'inline-flex h-8 items-center gap-2 rounded-full border bg-surface px-3 text-xs font-semibold tracking-wide transition-colors hover:bg-surface-raised',
           className,
         )}
       >
@@ -78,7 +78,7 @@ export function ConnectionPill() {
         <Popover.Content
           sideOffset={8}
           align="end"
-          className="z-50 w-64 rounded-md border border-border bg-surface p-3 text-sm shadow-lg"
+          className="z-50 w-64 rounded-[12px] border border-border/80 bg-surface p-3.5 text-sm shadow-overlay animate-pop-in"
         >
           <p className="text-text">{detail}</p>
           {status.lastError ? (

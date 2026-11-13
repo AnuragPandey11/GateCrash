@@ -14,7 +14,7 @@ export const SelectTrigger = forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-10 w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text disabled:cursor-not-allowed disabled:opacity-60 [&>span]:truncate',
+      'flex h-10 w-full items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm text-text shadow-[inset_0_1px_2px_hsl(224_40%_12%/0.04)] transition-[border-color,box-shadow] duration-200 hover:border-text-muted/40 focus-visible:border-accent focus-visible:ring-4 focus-visible:ring-accent/15 focus-visible:ring-offset-0 data-[state=open]:border-accent disabled:cursor-not-allowed disabled:opacity-60 [&>span]:truncate',
       className,
     )}
     {...props}
@@ -36,7 +36,7 @@ export const SelectContent = forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-md border border-border bg-surface shadow-lg',
+        'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-[12px] border border-border/80 bg-surface shadow-overlay data-[state=open]:animate-pop-in',
         position === 'popper' && 'w-[var(--radix-select-trigger-width)] translate-y-1',
         className,
       )}
@@ -67,14 +67,14 @@ export const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-sm py-2 pl-8 pr-2 text-sm text-text outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-surface-raised data-[disabled]:opacity-50',
+      'relative flex w-full cursor-default select-none items-center rounded-[8px] py-2 pl-8 pr-2 text-sm text-text outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-accent-soft data-[state=checked]:font-semibold data-[disabled]:opacity-50',
       className,
     )}
     {...props}
   >
     <span className="absolute left-2 flex size-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="size-4" />
+        <Check className="size-4 text-accent" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

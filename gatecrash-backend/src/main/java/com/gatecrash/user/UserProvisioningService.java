@@ -63,12 +63,17 @@ public class UserProvisioningService {
     public CreatedUserResponse createUser(CreateUserRequest request) {
         UUID townshipId = TenantContext.requireTownshipId();
         requireRoleIsProvisionable(request.role());
+        if (request.isSalesRequested() && !request.role().canBeSales()) {
+            throw new BusinessValidationException("SALES_NOT_ALLOWED_FOR_ROLE",
+                    "Only ADMIN and GUARD accounts can be marked as sales.");
+        }
 
         AppUser user = new AppUser();
         user.setTownship(townships.getReferenceById(townshipId));
         user.setRole(request.role());
         user.setFullName(request.fullName().trim());
         user.setCreatedBy(SecurityUtils.currentUserId());
+        user.setSales(request.isSalesRequested());
 
         if (request.role() == UserRole.RESIDENT) {
             applyResidentIdentity(user, request, townshipId);
@@ -94,12 +99,13 @@ public class UserProvisioningService {
         }
 
         audit.record(AuditAction.USER_PROVISIONED, "app_user", user.getId(),
-                AuditService.detail("loginId", user.getLoginId(), "role", user.getRole()));
+                AuditService.detail("loginId", user.getLoginId(), "role", user.getRole(),
+                        "sales", user.isSales()));
         log.info("Provisioned {} account {} ({}) in township {}",
                 user.getRole(), user.getId(), user.getLoginId(), townshipId);
 
         return new CreatedUserResponse(user.getId(), user.getLoginId(), user.getFullName(),
-                user.getRole(), townshipId, generatedPassword);
+                user.getRole(), user.isSales(), townshipId, generatedPassword);
     }
 
     /**

@@ -2,6 +2,7 @@ import {
   NOTIF_STATUS_META,
   PASS_STATUS_META,
   ROLE_META,
+  SALES_META,
   VISITOR_TYPE_META,
   VISIT_STATUS_META,
   type NotifStatus,
@@ -92,3 +93,16 @@ export const NotifStatusBadge = ({ status }: { status: NotifStatus }) => (
 );
 
 export const RoleBadge = ({ role }: { role: UserRole }) => <MetaBadge meta={ROLE_META[role]} />;
+
+/** Sales-team membership: a flag beside the role, never a role of its own. */
+export const SalesBadge = () => <MetaBadge meta={SALES_META} />;
+
+/** On a visit: the guard ticked "Meet Sales Agent". */
+export const MeetSalesBadge = () => {
+  const { t } = useTranslation();
+  return (
+    <Badge tone="warning" icon={<Handshake className="size-3" aria-hidden />}>
+      {t('visits.meetSalesAgent')}
+    </Badge>
+  );
+};

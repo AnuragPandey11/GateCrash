@@ -61,12 +61,44 @@ export interface AnnouncementFrame {
   body: string;
 }
 
+/** To the gate and the hosts: a checked-in visitor is past their expected exit (V8). */
+export interface OverstayAlertFrame {
+  type: 'OVERSTAY_ALERT';
+  visitId: VisitId;
+  gateId: GateId;
+  visitorName: string;
+  flatNumber?: string | null;
+  expectedOutAt?: string | null;
+}
+
+/** To the gate: the host extended a stay, so that visitor's overstay alarm is cleared. */
+export interface VisitExtendedFrame {
+  type: 'VISIT_EXTENDED';
+  visitId: VisitId;
+  gateId: GateId;
+  visitorName: string;
+  expectedOutAt?: string | null;
+  extendedByName?: string | null;
+}
+
+/** To one person: a ticket reply, a move decision, a cancelled booking (V8). */
+export interface ServiceUpdateFrame {
+  type: 'SERVICE_UPDATE';
+  kind: 'TICKET' | 'MOVE' | 'BOOKING' | string;
+  entityId: string;
+  title: string;
+  body?: string | null;
+}
+
 export type RealtimeFrame =
   | VisitRequestedFrame
   | VisitDecidedFrame
   | VisitExpiredFrame
   | OccupancyChangedFrame
-  | AnnouncementFrame;
+  | AnnouncementFrame
+  | OverstayAlertFrame
+  | VisitExtendedFrame
+  | ServiceUpdateFrame;
 
 export type RealtimeFrameType = RealtimeFrame['type'];
 
@@ -76,6 +108,9 @@ const FRAME_TYPES: readonly RealtimeFrameType[] = [
   'VISIT_EXPIRED',
   'OCCUPANCY_CHANGED',
   'ANNOUNCEMENT',
+  'OVERSTAY_ALERT',
+  'VISIT_EXTENDED',
+  'SERVICE_UPDATE',
 ];
 
 /**

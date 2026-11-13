@@ -117,18 +117,24 @@ export const createVisitRequestSchema = z
     vehicleNo: optionalTrimmed(20),
     photoUrl: optionalField(safeUrlSchema),
     targetFlatId: z.string().uuid().optional(),
+    /** The "Meet Sales Agent" tick-box. When set, the visit routes to a sales agent, not a unit. */
+    meetSalesAgent: z.boolean().default(false),
     salesAgentId: z.string().uuid().optional(),
+    purpose: optionalTrimmed(200),
+    /** Optional at the gate: the resident can set it when approving instead. */
+    expectedDurationMinutes: z.number().int().min(5).max(10080).optional(),
   })
   .superRefine((value, ctx) => {
-    // Mirrors the `client_routes_to_sales` CHECK on `visitor_log`: a CLIENT must route to a sales
-    // agent and everything else to a flat. Submitting the wrong one is a DB-level rejection, so
-    // catching it here is the difference between a clear message and a 500-shaped surprise.
-    if (value.visitorType === 'CLIENT') {
+    // Mirrors the `sales_meeting_routes_to_sales` CHECK on `visitor_log`: a visitor here to meet
+    // sales routes to a sales agent and everyone else to a unit. Submitting the wrong one is a
+    // DB-level rejection, so catching it here is the difference between a clear message and a
+    // 500-shaped surprise.
+    if (value.meetSalesAgent) {
       if (!value.salesAgentId) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['salesAgentId'],
-          message: 'A client visit must be routed to a sales agent.',
+          message: 'Pick the sales agent this visitor is here to meet.',
         });
       }
     } else if (!value.targetFlatId) {
@@ -145,13 +151,45 @@ export const visitDecisionRequestSchema = z.object({ decision: decisionSchema })
 
 // ── Passes ──────────────────────────────────────────────────────────────────────────────────
 
-export const createPassRequestSchema = z.object({
-  visitorName: optionalTrimmed(120),
-  visitorPhone: optionalField(phoneSchema),
-  visitorType: visitorTypeSchema,
-  validUntil: z.string().min(1),
-  maxUses: z.coerce.number().int().min(1).max(SERVER_DEFAULTS.passMaxUsesLimit),
-});
+/**
+ * A resident's pre-approval. It asks for the same details as the guard's walk-in form, and is
+ * stricter about two: the visitor's phone (the guard may need to call them) and when they leave —
+ * the out time for a one-time pass, the per-visit duration for a frequent one.
+ *
+ *  - ONE_TIME: `validFrom` = expected arrival, `validUntil` = out time (≤ 24 h apart). The QR works
+ *    from an hour before the arrival until the out time.
+ *  - FREQUENT: `validFrom`/`validUntil` = first/last day; works any time in between, unlimited
+ *    entries; `expectedDurationMinutes` is required.
+ */
+export const createPassRequestSchema = z
+  .object({
+    passType: z.enum(['ONE_TIME', 'FREQUENT']),
+    visitorName: z.string().trim().min(1, 'Enter the visitor’s name.').max(120),
+    visitorPhone: phoneSchema,
+    visitorType: visitorTypeSchema,
+    purpose: optionalTrimmed(200),
+    vehicleNo: optionalTrimmed(20),
+    validFrom: z.string().min(1, 'Pick a start.'),
+    validUntil: z.string().min(1, 'Pick an end.'),
+    expectedDurationMinutes: z.number().int().min(5).max(1440).optional(),
+    maxUses: z.number().int().min(1).max(SERVER_DEFAULTS.passMaxUsesLimit).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.passType === 'FREQUENT' && !value.expectedDurationMinutes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expectedDurationMinutes'],
+        message: 'Say how long each visit lasts.',
+      });
+    }
+    if (value.validFrom && value.validUntil && new Date(value.validUntil) <= new Date(value.validFrom)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['validUntil'],
+        message: value.passType === 'FREQUENT' ? 'The end date must be after the start.' : 'The out time must be after arrival.',
+      });
+    }
+  });
 export type CreatePassRequest = z.infer<typeof createPassRequestSchema>;
 
 export const redeemPassRequestSchema = z
@@ -174,8 +212,17 @@ export const createUserRequestSchema = z
     fullName: z.string().trim().min(1, 'Enter a full name.').max(120),
     phone: optionalField(phoneSchema),
     email: optionalField(z.string().trim().email('Enter a valid email address.').max(200)),
+    /** The "Is Sales" tick-box. ADMIN and GUARD only — the server refuses it on a resident. */
+    sales: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.sales && value.role !== 'ADMIN' && value.role !== 'GUARD') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sales'],
+        message: 'Only admin and guard accounts can be on the sales team.',
+      });
+    }
     // The server derives a resident's login id from the flat (`A-101-1`), so the form hides the
     // field entirely for RESIDENT and requires the flat instead (§8.7).
     if (value.role === 'RESIDENT') {
@@ -192,6 +239,8 @@ export const updateUserRequestSchema = z.object({
   fullName: z.string().trim().min(1).max(120).optional(),
   phone: optionalField(phoneSchema),
   email: optionalField(z.string().trim().email('Enter a valid email address.').max(200)),
+  /** Move the account on to or off the sales team. ADMIN/GUARD only. */
+  sales: z.boolean().optional(),
 });
 export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
 
@@ -202,6 +251,7 @@ export const audienceRuleSchema = z.object({
   roles: z.array(userRoleSchema).max(AUDIENCE_LIMITS.roles).optional(),
   flatIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.flatIds).optional(),
   blockIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.blockIds).optional(),
+  nodeIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.nodeIds).optional(),
 });
 
 export const createNotificationRequestSchema = z.object({
@@ -222,9 +272,16 @@ export type CreateNotificationRequest = Omit<
 
 // ── Community ───────────────────────────────────────────────────────────────────────────────
 
+/**
+ * `body` is rich-text HTML from the editor. The server sanitises it against an allowlist before
+ * storing it (`RichTextSanitizer`); the bound is generous because a picked image travels inline as
+ * a data URI until there is an upload endpoint (§15.1).
+ */
+export const POST_BODY_MAX = 3_000_000;
+
 export const createPostRequestSchema = z.object({
   title: z.string().trim().min(1, 'Enter a title.').max(200),
-  body: z.string().trim().min(1, 'Enter a body.').max(10_000),
+  body: z.string().trim().min(1, 'Enter a body.').max(POST_BODY_MAX),
   imageUrl: optionalField(safeUrlSchema),
   pinned: z.boolean(),
 });

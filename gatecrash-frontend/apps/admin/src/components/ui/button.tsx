@@ -10,20 +10,31 @@ import { cn } from '@/lib/cn';
  * — never by colour, so the token layer can change palette without touching call sites (§10.1).
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  [
+    'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[10px] text-sm font-semibold tracking-[0.005em]',
+    'transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out-expo',
+    'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  ].join(' '),
   {
     variants: {
       variant: {
-        primary: 'bg-primary text-primary-fg hover:bg-primary/90',
-        secondary: 'bg-surface-raised text-text hover:bg-surface-raised/70 border border-border',
-        ghost: 'text-text hover:bg-surface-raised',
-        danger: 'bg-danger text-danger-fg hover:bg-danger/90',
-        outline: 'border border-border bg-surface text-text hover:bg-surface-raised',
-        link: 'text-primary underline-offset-4 hover:underline',
+        // A faint top highlight and a soft shadow give the primary action weight without a
+        // gradient that would date the product.
+        primary:
+          'bg-primary text-primary-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.12),var(--gc-shadow-soft)] hover:bg-primary/90 hover:shadow-raised',
+        accent:
+          'bg-accent text-accent-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.25),var(--gc-shadow-soft)] hover:bg-accent/90 hover:shadow-raised',
+        secondary:
+          'border border-border bg-surface text-text shadow-soft hover:border-accent/50 hover:bg-surface-raised',
+        ghost: 'text-text-muted hover:bg-surface-raised hover:text-text',
+        danger:
+          'bg-danger text-danger-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.12),var(--gc-shadow-soft)] hover:bg-danger/90',
+        outline: 'border border-border bg-transparent text-text hover:border-accent/60 hover:bg-accent/5',
+        link: 'text-primary underline-offset-4 hover:underline active:scale-100',
       },
       size: {
         // 48px minimum touch target on the two sizes a finger is likely to meet (§9.7).
-        sm: 'h-8 px-3 text-xs',
+        sm: 'h-9 px-3.5 text-xs',
         md: 'h-10 px-4',
         lg: 'h-12 px-6 text-base',
         icon: 'h-10 w-10',

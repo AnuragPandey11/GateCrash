@@ -1,5 +1,8 @@
 package com.gatecrash.visit;
 
+import com.gatecrash.user.UserRole;
+import com.gatecrash.user.AppUserRepository;
+import com.gatecrash.user.AppUser;
 import com.gatecrash.device.DeviceService;
 import com.gatecrash.push.FcmService;
 import com.gatecrash.push.PushPayload;
@@ -42,6 +45,7 @@ public class VisitNotifier {
     private final DeviceService devices;
     private final FcmService fcm;
     private final RealtimeService realtime;
+    private final AppUserRepository users;
 
     /** Step 4 of the approval loop: tell the routed approver(s) that someone is at the gate. */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
@@ -94,8 +98,14 @@ public class VisitNotifier {
             }
             fcm.push(devices.tokensFor(guardId), PushPayload.of(
                     PushPayload.TYPE_VISIT_DECIDED,
-                    status == VisitStatus.APPROVED ? "Visit approved" : "Visit rejected",
-                    visitorName + " was " + status.name().toLowerCase() + ".",
+                    switch (status) {
+                        case APPROVED -> "Visit approved";
+                        case LEFT_AT_GATE -> "Leave at gate";
+                        default -> "Visit rejected";
+                    },
+                    status == VisitStatus.LEFT_AT_GATE
+                            ? "Keep the parcel from " + visitorName + " at the gate for collection."
+                            : visitorName + " was " + status.name().toLowerCase() + ".",
                     Map.of("visitId", visitId.toString(),
                             "gateId", gateId.toString(),
                             "status", status.name())));
@@ -117,5 +127,41 @@ public class VisitNotifier {
         long inside = visits.countByTownship_IdAndStatus(townshipId, VisitStatus.CHECKED_IN);
         realtime.toAdminInside(townshipId, RealtimeEvents.OccupancyChangedEvent.of(
                 visitId, status, visitorName, gateName, inside, OffsetDateTime.now()));
+    }
+
+    /** The host extended a stay: clear the alarm on the gate console and show the new exit time. */
+    public void stayExtended(UUID visitId, UUID gateId, String visitorName, OffsetDateTime expectedOutAt,
+                             String extendedByName) {
+        realtime.toGate(gateId, RealtimeEvents.VisitExtendedEvent.of(
+                visitId, gateId, visitorName, expectedOutAt, extendedByName));
+    }
+
+    /**
+     * A visitor is past their expected exit. Two audiences, by decision: the guard at the gate
+     * (a live alarm on the console) and the hosts -- every active resident of the flat, or the
+     * sales agent -- who can extend the stay from their own screen.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public void overstay(UUID visitId) {
+        VisitorLog visit = visits.findDetailedByIdUnscoped(visitId).orElse(null);
+        if (visit == null) {
+            return;
+        }
+        UUID gateId = visit.getGate().getId();
+        String flatNumber = visit.getTargetUnit() == null ? null : visit.getTargetUnit().getCode();
+        RealtimeEvents.OverstayAlertEvent event = RealtimeEvents.OverstayAlertEvent.of(
+                visitId, gateId, visit.getVisitorName(), flatNumber, visit.getExpectedOutAt());
+        realtime.toGate(gateId, event);
+
+        List<UUID> hosts = visit.getTargetUnit() != null
+                ? users.findByUnit_IdAndRoleAndActiveTrue(visit.getTargetUnit().getId(), UserRole.RESIDENT)
+                        .stream().map(AppUser::getId).toList()
+                : (visit.getApproverId() == null ? List.of() : List.of(visit.getApproverId()));
+        hosts.forEach(userId -> realtime.toUser(userId, RealtimeService.QUEUE_VISITS, event));
+        fcm.push(devices.tokensFor(hosts), PushPayload.of(
+                PushPayload.TYPE_OVERSTAY_ALERT,
+                visit.getVisitorName() + " has overstayed",
+                "Their expected exit time has passed. Extend the stay or let the gate know.",
+                Map.of("visitId", visitId.toString(), "gateId", gateId.toString())));
     }
 }

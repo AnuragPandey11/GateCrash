@@ -37,6 +37,35 @@ public enum PropertyType {
             new LevelPreset(PropertyNodeKind.UNIT, "Flat", "Flats"))),
 
     /**
+     * A cooperative housing society: the older Indian form, where buildings are "wings" (A-wing,
+     * B-wing) rather than towers. Same shape as an apartment complex, in the society's own words.
+     */
+    HOUSING_SOCIETY(Category.RESIDENTIAL, "Housing society (wings)",
+            "A cooperative society of wings, floors and flats.", List.of(
+            new LevelPreset(PropertyNodeKind.BUILDING, "Wing", "Wings"),
+            new LevelPreset(PropertyNodeKind.FLOOR, "Floor", "Floors"),
+            new LevelPreset(PropertyNodeKind.UNIT, "Flat", "Flats"))),
+
+    /**
+     * A residential colony run by an RWA: independent houses along blocks or streets, no towers.
+     * The house is the home; how many storeys it has is not the society's business.
+     */
+    RESIDENTIAL_COLONY(Category.RESIDENTIAL, "Residential colony / RWA",
+            "Independent houses in blocks or streets, run by a residents' welfare association.", List.of(
+            new LevelPreset(PropertyNodeKind.GROUP, "Block", "Blocks"),
+            new LevelPreset(PropertyNodeKind.UNIT, "House", "Houses"))),
+
+    /**
+     * Builder floors: a plot with a low-rise building where each floor is sold as a separate home
+     * ("Plot 14, second floor"). The plot is the building and each floor is the unit -- so the unit
+     * level is named "Floor" while its kind stays UNIT.
+     */
+    BUILDER_FLOOR(Category.RESIDENTIAL, "Builder floors",
+            "Low-rise buildings on plots, where every floor is a separate home.", List.of(
+            new LevelPreset(PropertyNodeKind.BUILDING, "Plot", "Plots"),
+            new LevelPreset(PropertyNodeKind.UNIT, "Floor", "Floors"))),
+
+    /**
      * Gated villa community. No floor level: a villa may well have three storeys, but they are not
      * separately addressable -- the villa is the unit, and a visitor is routed to it whole.
      */
@@ -141,7 +170,24 @@ public enum PropertyType {
             new LevelPreset(PropertyNodeKind.GROUP, "Phase", "Phases"),
             new LevelPreset(PropertyNodeKind.UNIT, "Unit", "Units"))),
 
-    // ----- Mixed --------------------------------------------------------------------------
+    /** An open market or shopping street: rows of shops at ground level, no floors. */
+    MARKET(Category.COMMERCIAL, "Market / shopping street",
+            "Rows of ground-level shops, as in a local market or a high street.", List.of(
+            new LevelPreset(PropertyNodeKind.GROUP, "Row", "Rows"),
+            new LevelPreset(PropertyNodeKind.UNIT, "Shop", "Shops"))),
+
+    // ----- Mixed & institutional ----------------------------------------------------------
+
+    /**
+     * A campus -- a school, college, hospital or hostel complex -- where people are addressed by
+     * room. Grouped with mixed use because it is neither housing for sale nor leasable retail.
+     */
+    INSTITUTIONAL_CAMPUS(Category.MIXED, "Campus (school, hospital, hostel)",
+            "Buildings of floors of rooms on one campus.", List.of(
+            new LevelPreset(PropertyNodeKind.BUILDING, "Building", "Buildings"),
+            new LevelPreset(PropertyNodeKind.FLOOR, "Floor", "Floors"),
+            new LevelPreset(PropertyNodeKind.UNIT, "Room", "Rooms"))),
+
 
     /**
      * Anything that mixes shapes. Starts deepest, because it is easier for an admin to delete a
@@ -155,11 +201,11 @@ public enum PropertyType {
             new LevelPreset(PropertyNodeKind.FLOOR, "Floor", "Floors"),
             new LevelPreset(PropertyNodeKind.UNIT, "Unit", "Units")));
 
-    /** Groups the picker, which is otherwise fifteen items of undifferentiated dropdown. */
+    /** Groups the picker, which is otherwise twenty items of undifferentiated choice. */
     public enum Category {
         RESIDENTIAL("Residential"),
         COMMERCIAL("Commercial"),
-        MIXED("Mixed use");
+        MIXED("Mixed use & institutional");
 
         private final String label;
 

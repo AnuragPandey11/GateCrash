@@ -48,7 +48,7 @@ describe('send gating', () => {
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
 
-    await user.click(screen.getByRole('button', { name: 'Selected roles' }));
+    await user.click(screen.getByRole('radio', { name: /^By role/ }));
 
     expect(await screen.findByText('Pick at least one role.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Send/ })).toBeDisabled();
@@ -59,7 +59,7 @@ describe('send gating', () => {
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
 
-    await user.click(screen.getByRole('button', { name: 'Selected roles' }));
+    await user.click(screen.getByRole('radio', { name: /^By role/ }));
     await user.click(screen.getByRole('checkbox', { name: 'Resident' }));
 
     await waitFor(
@@ -143,11 +143,17 @@ describe('audience rule construction', () => {
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
 
-    await user.click(screen.getByRole('button', { name: 'Selected blocks' }));
+    await user.click(screen.getByRole('radio', { name: /^Specific/ }));
     await user.click(await screen.findByRole('checkbox', { name: 'Block A' }));
-    await waitFor(() => expect(previews.length).toBeGreaterThan(0), { timeout: 3000 });
+    await waitFor(
+      () => {
+        const last = previews[previews.length - 1] as Record<string, unknown> | undefined;
+        expect(last?.mode).toBe('NODES');
+      },
+      { timeout: 3000 },
+    );
 
-    await user.click(screen.getByRole('button', { name: 'Everyone' }));
+    await user.click(screen.getByRole('radio', { name: /^Everyone/ }));
     await waitFor(
       () => {
         const last = previews[previews.length - 1] as Record<string, unknown>;
@@ -155,7 +161,44 @@ describe('audience rule construction', () => {
       },
       { timeout: 3000 },
     );
-    // A stale blockIds reaching the resolver would blast an audience nobody reviewed (§4.3.1).
+    // A stale nodeIds reaching the resolver would blast an audience nobody reviewed (§4.3.1).
+  });
+
+  it('sends a whole building as one node id, not its flats', async () => {
+    const user = userEvent.setup();
+    const previews: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${TEST_API_URL}/api/v1/notifications/preview`, async ({ request }) => {
+        previews.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ recipientCount: 2, deviceCount: 2 });
+      }),
+    );
+
+    renderWithProviders(<NotificationsRoute />);
+    await fillMessage(user);
+    await user.click(screen.getByRole('radio', { name: /^Specific/ }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Block A' }));
+
+    await waitFor(
+      () => {
+        const last = previews[previews.length - 1];
+        expect(last?.mode).toBe('NODES');
+        expect(last?.nodeIds).toHaveLength(1);
+      },
+      { timeout: 3000 },
+    );
+    expect(screen.getByText(/Covers 2 flats/)).toBeInTheDocument();
+  });
+
+  it('offers templates only while the message is empty', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<NotificationsRoute />);
+
+    await user.click(screen.getByRole('button', { name: 'Electricity bill' }));
+
+    expect(screen.getByLabelText(/^Title/)).toHaveValue('Electricity bill due');
+    // Once there is a message, picking another template could overwrite it — so they go away.
+    expect(screen.queryByRole('button', { name: 'Water supply' })).not.toBeInTheDocument();
   });
 });
 

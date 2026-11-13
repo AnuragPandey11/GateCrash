@@ -31,10 +31,10 @@ import java.util.stream.Collectors;
  * the township, and a shared tablet at the gate is the last place resident-facing announcements
  * should be visible.
  *
- * <p>Post bodies are stored verbatim, HTML and all. Escaping belongs at the point of rendering, not
- * of storage -- sanitising here would corrupt legitimate text and still leave a client that renders
- * raw HTML vulnerable. The image URL is the one field the server can meaningfully constrain, and it
- * is restricted to https.
+ * <p>Post bodies are rich text: HTML produced by the console's editor. Because every client has to
+ * render them as HTML, they are reduced to an allowlist by {@link RichTextSanitizer} before they
+ * are stored, so a hand-crafted request cannot plant script in every resident's feed. Clients
+ * sanitise again before rendering. The cover image URL is restricted to https.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,6 +43,7 @@ public class CommunityService {
     private final CommunityPostRepository posts;
     private final AppUserRepository users;
     private final AuditService audit;
+    private final RichTextSanitizer sanitizer;
 
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -53,7 +54,7 @@ public class CommunityService {
         post.setTownshipId(TenantContext.requireTownshipId());
         post.setAuthorId(authorId);
         post.setTitle(request.title().trim());
-        post.setBody(request.body().trim());
+        post.setBody(sanitizer.sanitize(request.body()));
         post.setImageUrl(SafeUrl.validateHttps(request.imageUrl(), "imageUrl"));
         post.setPinned(request.pinned());
         post.setPublishedAt(OffsetDateTime.now());

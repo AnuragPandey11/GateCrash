@@ -30,13 +30,22 @@ public final class UserDtos {
             @NotNull UserRole role,
             /** Required for RESIDENT; the login id is derived from the flat number. */
             UUID flatId,
-            /** Required for SALES/GUARD/ADMIN; ignored for RESIDENT. */
+            /** Required for GUARD/ADMIN; ignored for RESIDENT. */
             @Pattern(regexp = LOGIN_ID_PATTERN, message = "must be 2-64 characters of letters, digits, dot, dash or underscore")
             String loginId,
             @NotBlank @Size(max = 120) String fullName,
             @Pattern(regexp = PHONE_PATTERN, message = "must be 7-15 digits, optionally prefixed with +")
             String phone,
-            @Email @Size(max = 200) String email) {
+            @Email @Size(max = 200) String email,
+            /**
+             * The "Is Sales" tick-box: this account belongs to the sales team. Allowed on ADMIN and
+             * GUARD only; null means false.
+             */
+            Boolean sales) {
+
+        public boolean isSalesRequested() {
+            return Boolean.TRUE.equals(sales);
+        }
     }
 
     /**
@@ -47,14 +56,16 @@ public final class UserDtos {
      * usable sign-in card.
      */
     public record CreatedUserResponse(UUID id, String loginId, String fullName, UserRole role,
-                                      UUID townshipId, String generatedPassword) {
+                                      boolean sales, UUID townshipId, String generatedPassword) {
     }
 
     public record UpdateUserRequest(
             @Size(max = 120) String fullName,
             @Pattern(regexp = PHONE_PATTERN, message = "must be 7-15 digits, optionally prefixed with +")
             String phone,
-            @Email @Size(max = 200) String email) {
+            @Email @Size(max = 200) String email,
+            /** Toggle sales-team membership. Null leaves it unchanged. ADMIN/GUARD only. */
+            Boolean sales) {
     }
 
     public record UserResponse(
@@ -63,6 +74,7 @@ public final class UserDtos {
             UUID townshipId,
             String fullName,
             UserRole role,
+            boolean sales,
             String phone,
             String email,
             boolean active,

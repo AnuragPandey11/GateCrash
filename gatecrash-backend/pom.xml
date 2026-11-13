@@ -120,6 +120,13 @@
       <version>${springdoc.version}</version>
     </dependency>
 
+    <!-- Allowlist HTML sanitiser for rich-text community posts -->
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+      <version>1.18.1</version>
+    </dependency>
+
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>

@@ -1,5 +1,6 @@
 import {
   PAGE_DEFAULTS,
+  POST_BODY_MAX,
   createPostRequestSchema,
   useCommunityFeed,
   useCreatePost,
@@ -29,25 +30,28 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { CharCount, Field } from '@/components/ui/field';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
+import { RichTextEditor } from '@/features/community/rich-text-editor';
+import { RichTextView } from '@/features/community/rich-text-view';
 import { applyFieldErrors, errorMessage, toastError } from '@/lib/errors';
 import { toast } from '@/lib/toast';
 
 const TITLE_MAX = 200;
-const BODY_MAX = 10_000;
 
 /**
  * Community — FRONTEND.md §8.6.
  *
- * Plain textarea, **not** a rich-text editor: the mobile feed renders plain text, so anything
- * fancier here would produce markup residents see as literal characters.
+ * Posts are rich text: a Quill editor with headings, emphasis, lists, alignment, links, inline
+ * images and YouTube/Vimeo video. The server sanitises the HTML against an allowlist before
+ * storing it, and the feed sanitises again before rendering (`RichTextView`). Any client that
+ * shows the feed — the mobile app included, when it is built — must render it as HTML.
  *
- * `imageUrl` is a paste-a-URL field with an https check and a live preview, clearly labelled as
- * such. There is no upload endpoint (§15.1) and building an uploader against one that does not
- * exist would ship a button that cannot work.
+ * Images picked in the editor travel inline as data URIs, because there is no upload endpoint
+ * yet (§15.1). The optional cover image stays a paste-a-URL field for the same reason.
  */
-export function CommunityRoute() {
+/** `readOnly` is the resident's view: the same feed, no compose or delete. */
+export function CommunityRoute({ readOnly = false }: { readOnly?: boolean }) {
   const { t } = useTranslation();
   const [page, setPage] = useState<PageArgs>({ page: 1, size: PAGE_DEFAULTS.community });
   const [composing, setComposing] = useState(false);
@@ -75,13 +79,16 @@ export function CommunityRoute() {
   return (
     <>
       <PageHeader
+        eyebrow={t('pageEyebrow.community')}
         title={t('community.title')}
         description={t('community.subtitle')}
         actions={
-          <Button onClick={() => setComposing(true)}>
-            <Plus aria-hidden />
-            {t('community.compose')}
-          </Button>
+          readOnly ? null : (
+            <Button onClick={() => setComposing(true)}>
+              <Plus aria-hidden />
+              {t('community.compose')}
+            </Button>
+          )
         }
       />
 
@@ -95,19 +102,21 @@ export function CommunityRoute() {
           <EmptyState
             icon={MessageSquare}
             title={t('community.empty')}
-            action={<Button onClick={() => setComposing(true)}>{t('community.compose')}</Button>}
+            action={
+              readOnly ? undefined : <Button onClick={() => setComposing(true)}>{t('community.compose')}</Button>
+            }
           />
         </Card>
       ) : null}
 
-      <div className="space-y-3">
+      <div className="stagger space-y-4">
         {posts.map((post) => (
-          <Card key={post.id}>
+          <Card key={post.id} className="lift">
             <CardContent className="space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-medium text-text">{post.title}</h2>
+                    <h2 className="font-display text-xl text-text">{post.title}</h2>
                     {post.pinned ? (
                       <Badge tone="primary" icon={<Pin className="size-3" aria-hidden />}>
                         {t('community.pinnedBadge')}
@@ -120,27 +129,27 @@ export function CommunityRoute() {
                     {formatDateTime(post.publishedAt)}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t('common.delete')}
-                  onClick={() => setDeleting(post)}
-                >
-                  <Trash2 className="text-danger" />
-                </Button>
+                {readOnly ? null : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t('common.delete')}
+                    onClick={() => setDeleting(post)}
+                  >
+                    <Trash2 className="text-danger" />
+                  </Button>
+                )}
               </div>
-
-              {/* `whitespace-pre-wrap` so the line breaks an admin typed survive, matching how
-                  the mobile feed renders the same text. */}
-              <p className="whitespace-pre-wrap text-sm text-text">{post.body}</p>
 
               {post.imageUrl ? (
                 <img
                   src={post.imageUrl}
                   alt=""
-                  className="max-h-72 rounded-md border border-border object-cover"
+                  className="max-h-72 w-full rounded-md border border-border object-cover"
                 />
               ) : null}
+
+              <RichTextView html={post.body} />
             </CardContent>
           </Card>
         ))}
@@ -187,7 +196,7 @@ function ComposeDialog({
   });
 
   const title = form.watch('title') ?? '';
-  const body = form.watch('body') ?? '';
+  const [bodyTextLength, setBodyTextLength] = useState(0);
   const imageUrl = form.watch('imageUrl') ?? '';
   const pinned = form.watch('pinned');
 
@@ -195,7 +204,7 @@ function ComposeDialog({
     try {
       await create.mutateAsync({
         title: values.title.trim(),
-        body: values.body.trim(),
+        body: values.body,
         // An empty string would fail the server's `SafeUrl` check; absent is what "no image" means.
         imageUrl: values.imageUrl?.trim() || undefined,
         pinned: values.pinned,
@@ -231,19 +240,40 @@ function ComposeDialog({
             {(props) => <Input {...props} {...form.register('title')} maxLength={TITLE_MAX} />}
           </Field>
 
-          <Field
-            label={t('community.postBody')}
-            error={form.formState.errors.body?.message}
-            hint={<CharCount value={body} max={BODY_MAX} />}
-            required
-          >
-            {(props) => (
-              <Textarea {...props} {...form.register('body')} rows={8} maxLength={BODY_MAX} />
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium text-text">
+              {t('community.postBody')}
+              <span className="ml-0.5 text-danger">*</span>
+            </p>
+            <RichTextEditor
+              ariaLabel={t('community.postBody')}
+              placeholder={t('community.editor.placeholder')}
+              invalid={Boolean(form.formState.errors.body)}
+              onChange={({ html, textLength }) => {
+                setBodyTextLength(textLength);
+                form.setValue('body', html, {
+                  shouldValidate: form.formState.isSubmitted,
+                  shouldDirty: true,
+                });
+              }}
+            />
+            {form.formState.errors.body ? (
+              <p role="alert" className="text-xs text-danger">
+                {form.formState.errors.body.type === 'too_big'
+                  ? t('community.editor.tooLarge', {
+                      mb: Math.round(POST_BODY_MAX / 1_000_000),
+                    })
+                  : t('community.editor.required')}
+              </p>
+            ) : (
+              <p className="text-xs text-text-muted">
+                {t('community.editor.characters', { count: bodyTextLength })}
+              </p>
             )}
-          </Field>
+          </div>
 
           <Field
-            label={t('community.imageUrl')}
+            label={t('community.coverImage')}
             hint={t('community.imageUrlHint')}
             error={form.formState.errors.imageUrl?.message}
           >

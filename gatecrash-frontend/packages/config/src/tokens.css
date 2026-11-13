@@ -6,69 +6,107 @@
  *
  * NativeWind on mobile consumes the same token *names* via the shared Tailwind preset, which is
  * what makes "the design system is genuinely shared" true rather than aspirational.
+ *
+ * Palette — "Ink & Indigo".
+ *   Light: deep indigo on warm stone. Indigo carries action; a brighter indigo carries emphasis
+ *          (focus, the brand mark, the eyebrow labels), used sparingly.
+ *   Dark:  a soft periwinkle on charcoal-ink — cool and calm, high contrast without glare.
+ *   The brand is deliberately neither green nor red, so it can never be mistaken for the
+ *   Approved / Denied status colours. Status colours are jewel tones — emerald, garnet, amber,
+ *   teal, plum — and each still clears WCAG AA for its badge text.
  */
 
 :root {
-  /* Neutrals */
-  --gc-bg: 210 20% 98%;
+  /* Neutrals — warm stone, never a clinical #fff page */
+  --gc-bg: 30 14% 97%;
   --gc-surface: 0 0% 100%;
-  --gc-surface-raised: 210 20% 96%;
-  --gc-border: 214 20% 88%;
+  --gc-surface-raised: 30 12% 94.5%;
+  --gc-border: 30 8% 87%;
 
-  /* Foreground */
-  --gc-text: 222 25% 12%;
-  --gc-text-muted: 215 14% 42%;
+  /* Foreground — ink, not black */
+  --gc-text: 230 25% 13%;
+  --gc-text-muted: 230 8% 44%;
   --gc-text-inverse: 0 0% 100%;
 
-  /* Brand action */
-  --gc-primary: 221 78% 46%;
+  /* Brand action — deep indigo */
+  --gc-primary: 234 46% 34%;
   --gc-primary-fg: 0 0% 100%;
+
+  /* Brand emphasis — a brighter indigo */
+  --gc-accent: 234 58% 52%;
+  --gc-accent-fg: 0 0% 100%;
+  --gc-accent-soft: 234 60% 96%;
 
   /* Status. `pending` is deliberately distinct from `warning`:
      pending is *waiting*, expired is *failed*. §10.1. */
-  --gc-success: 152 62% 33%;
+  --gc-success: 156 52% 28%;
   --gc-success-fg: 0 0% 100%;
-  --gc-danger: 0 72% 45%;
+  --gc-danger: 352 58% 44%;
   --gc-danger-fg: 0 0% 100%;
-  --gc-warning: 33 92% 42%;
+  --gc-warning: 32 80% 37%;
   --gc-warning-fg: 0 0% 100%;
-  --gc-info: 199 84% 38%;
+  --gc-info: 190 64% 30%;
   --gc-info-fg: 0 0% 100%;
-  --gc-pending: 262 62% 52%;
+  --gc-pending: 300 32% 42%;
   --gc-pending-fg: 0 0% 100%;
 
-  /* Focus ring */
-  --gc-ring: 221 78% 46%;
+  --gc-ring: 234 58% 52%;
 
-  /* Radii — sm 6 / md 10 / lg 16 / full */
-  --gc-radius-sm: 6px;
-  --gc-radius-md: 10px;
-  --gc-radius-lg: 16px;
+  /* Used by the sign-in brand panel. */
+  --gc-sidebar: 232 32% 13%;
+  --gc-sidebar-fg: 228 30% 94%;
+  --gc-sidebar-muted: 230 14% 68%;
+  --gc-sidebar-border: 232 24% 20%;
+  --gc-sidebar-hover: 232 28% 17%;
+
+  /* Radii — sm 8 / md 12 / lg 18 / full */
+  --gc-radius-sm: 8px;
+  --gc-radius-md: 12px;
+  --gc-radius-lg: 18px;
+
+  /* Elevation — soft and layered */
+  --gc-shadow-soft: 0 1px 2px hsl(230 30% 12% / 0.04), 0 2px 8px hsl(230 30% 12% / 0.04);
+  --gc-shadow-raised: 0 2px 4px hsl(230 30% 12% / 0.04), 0 8px 24px hsl(230 30% 12% / 0.08);
+  --gc-shadow-overlay: 0 12px 32px hsl(230 30% 8% / 0.16), 0 32px 80px hsl(230 30% 8% / 0.18);
 }
 
 .dark {
-  --gc-bg: 222 30% 8%;
-  --gc-surface: 222 26% 11%;
-  --gc-surface-raised: 222 22% 16%;
-  --gc-border: 220 16% 24%;
+  --gc-bg: 230 16% 7%;
+  --gc-surface: 230 14% 10%;
+  --gc-surface-raised: 230 12% 14%;
+  --gc-border: 230 10% 20%;
 
-  --gc-text: 210 30% 96%;
-  --gc-text-muted: 215 16% 65%;
-  --gc-text-inverse: 222 30% 8%;
+  --gc-text: 228 22% 93%;
+  --gc-text-muted: 230 8% 64%;
+  --gc-text-inverse: 230 16% 7%;
 
-  --gc-primary: 217 90% 62%;
-  --gc-primary-fg: 222 40% 10%;
+  --gc-primary: 232 78% 76%;
+  --gc-primary-fg: 232 40% 10%;
 
-  --gc-success: 152 55% 45%;
-  --gc-success-fg: 222 40% 8%;
-  --gc-danger: 0 72% 60%;
-  --gc-danger-fg: 222 40% 8%;
-  --gc-warning: 38 92% 55%;
-  --gc-warning-fg: 222 40% 8%;
-  --gc-info: 199 84% 55%;
-  --gc-info-fg: 222 40% 8%;
-  --gc-pending: 262 72% 68%;
-  --gc-pending-fg: 222 40% 8%;
+  --gc-accent: 232 78% 76%;
+  --gc-accent-fg: 232 40% 10%;
+  --gc-accent-soft: 232 28% 17%;
 
-  --gc-ring: 217 90% 62%;
+  --gc-success: 156 46% 54%;
+  --gc-success-fg: 230 16% 7%;
+  --gc-danger: 352 72% 68%;
+  --gc-danger-fg: 230 16% 7%;
+  --gc-warning: 36 82% 62%;
+  --gc-warning-fg: 230 16% 7%;
+  --gc-info: 188 60% 58%;
+  --gc-info-fg: 230 16% 7%;
+  --gc-pending: 300 40% 72%;
+  --gc-pending-fg: 230 16% 7%;
+
+  --gc-ring: 232 78% 76%;
+
+  --gc-sidebar: 230 18% 5%;
+  --gc-sidebar-fg: 228 22% 93%;
+  --gc-sidebar-muted: 230 8% 62%;
+  --gc-sidebar-border: 230 12% 13%;
+  --gc-sidebar-hover: 230 14% 9%;
+
+  --gc-shadow-soft: 0 1px 2px hsl(0 0% 0% / 0.3), 0 2px 8px hsl(0 0% 0% / 0.2);
+  --gc-shadow-raised: 0 2px 4px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.35);
+  --gc-shadow-overlay: 0 12px 32px hsl(0 0% 0% / 0.45), 0 32px 80px hsl(0 0% 0% / 0.5);
 }

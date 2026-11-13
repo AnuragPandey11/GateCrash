@@ -60,6 +60,40 @@ public final class AuditAction {
     public static final String VISIT_CHECKED_IN = "VISIT_CHECKED_IN";
     public static final String VISIT_CHECKED_OUT = "VISIT_CHECKED_OUT";
     public static final String VISIT_EXPIRED = "VISIT_EXPIRED";
+    public static final String VISIT_LEFT_AT_GATE = "VISIT_LEFT_AT_GATE";
+    public static final String VISIT_COLLECTION_CODE_REISSUED = "VISIT_COLLECTION_CODE_REISSUED";
+    public static final String VISIT_PARCEL_COLLECTED = "VISIT_PARCEL_COLLECTED";
+    public static final String VISIT_PARCEL_COLLECT_FAILED = "VISIT_PARCEL_COLLECT_FAILED";
+    public static final String VISIT_STAY_EXTENDED = "VISIT_STAY_EXTENDED";
+    public static final String VISIT_OVERSTAY = "VISIT_OVERSTAY";
+
+    // resident services
+    public static final String TICKET_RAISED = "TICKET_RAISED";
+    public static final String TICKET_REPLIED = "TICKET_REPLIED";
+    public static final String TICKET_STATUS_CHANGED = "TICKET_STATUS_CHANGED";
+    public static final String AMENITY_CREATED = "AMENITY_CREATED";
+    public static final String AMENITY_UPDATED = "AMENITY_UPDATED";
+    public static final String BOOKING_CREATED = "BOOKING_CREATED";
+    public static final String BOOKING_CANCELLED = "BOOKING_CANCELLED";
+    public static final String MOVE_REQUESTED = "MOVE_REQUESTED";
+    public static final String MOVE_DECIDED = "MOVE_DECIDED";
+    public static final String MOVE_CANCELLED = "MOVE_CANCELLED";
+    public static final String MOVE_COMPLETED = "MOVE_COMPLETED";
+    public static final String INVOICE_RECORDED = "INVOICE_RECORDED";
+    public static final String INVOICE_MARKED_PAID = "INVOICE_MARKED_PAID";
+    public static final String RULE_REQUESTED = "RULE_REQUESTED";
+    public static final String RULE_DECIDED = "RULE_DECIDED";
+    public static final String RULE_CANCELLED = "RULE_CANCELLED";
+    public static final String RULE_REVOKED = "RULE_REVOKED";
+    public static final String VISIT_AUTO_APPROVED = "VISIT_AUTO_APPROVED";
+    public static final String STAFF_REGISTERED = "STAFF_REGISTERED";
+    public static final String STAFF_LINKED = "STAFF_LINKED";
+    public static final String STAFF_UNLINKED = "STAFF_UNLINKED";
+    public static final String STAFF_CODE_REISSUED = "STAFF_CODE_REISSUED";
+    public static final String STAFF_ACTIVE_CHANGED = "STAFF_ACTIVE_CHANGED";
+    public static final String STAFF_CHECKED_IN = "STAFF_CHECKED_IN";
+    public static final String STAFF_CHECKED_OUT = "STAFF_CHECKED_OUT";
+    public static final String STAFF_RATED = "STAFF_RATED";
 
     // passes
     public static final String PASS_CREATED = "PASS_CREATED";

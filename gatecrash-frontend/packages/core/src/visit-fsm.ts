@@ -12,12 +12,14 @@ import type { Decision, VisitStatus } from './enums';
  * `CHECKED_IN`; that is a creation path, not a transition, so it does not appear here.
  */
 export const VISIT_TRANSITIONS: Record<VisitStatus, readonly VisitStatus[]> = {
-  PENDING: ['APPROVED', 'REJECTED', 'EXPIRED'],
+  PENDING: ['APPROVED', 'REJECTED', 'EXPIRED', 'LEFT_AT_GATE'],
   APPROVED: ['CHECKED_IN', 'EXPIRED'],
   CHECKED_IN: ['CHECKED_OUT'],
   REJECTED: [],
   EXPIRED: [],
   CHECKED_OUT: [],
+  LEFT_AT_GATE: ['COLLECTED'],
+  COLLECTED: [],
 };
 
 export function canTransition(from: VisitStatus, to: VisitStatus): boolean {
@@ -53,5 +55,10 @@ export function canDecide(status: VisitStatus): boolean {
 
 /** The status a decision produces, so an optimistic update never has to guess. */
 export function statusForDecision(decision: Decision): VisitStatus {
-  return decision;
+  return decision === 'LEAVE_AT_GATE' ? 'LEFT_AT_GATE' : decision;
+}
+
+/** A parcel is waiting at the gate for a resident with the collection code. */
+export function isParcelAtGate(status: VisitStatus): boolean {
+  return status === 'LEFT_AT_GATE';
 }

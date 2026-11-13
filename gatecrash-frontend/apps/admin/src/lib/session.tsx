@@ -54,6 +54,33 @@ interface SessionStore {
   setLoading: () => void;
 }
 
+/**
+ * A platform operator's chosen township survives a page refresh.
+ *
+ * Kept per account (the key carries the user id), so two operators sharing a browser never inherit
+ * each other's context, and cleared on an explicit sign-out. It is only a *preference*: the server
+ * validates `X-Township-Id` on every request, and `bootstrapSession` re-checks that the township
+ * still exists and is active before trusting it.
+ */
+const actingKey = (userId: string) => `gc.acting-township.${userId}`;
+
+function readActing(userId: string): string | null {
+  try {
+    return localStorage.getItem(actingKey(userId));
+  } catch {
+    return null;
+  }
+}
+
+function writeActing(userId: string, townshipId: string | null): void {
+  try {
+    if (townshipId) localStorage.setItem(actingKey(userId), townshipId);
+    else localStorage.removeItem(actingKey(userId));
+  } catch {
+    // Private mode: the choice lasts for this tab only. Acceptable.
+  }
+}
+
 export const useSessionStore = create<SessionStore>((set) => ({
   state: 'loading',
   me: null,
@@ -61,17 +88,26 @@ export const useSessionStore = create<SessionStore>((set) => ({
   actingTownshipId: null,
 
   setMe: (me) =>
-    set({
+    set((prev) => ({
       me,
       state: me.mustResetPassword ? 'mustResetPassword' : 'authenticated',
       endedReason: null,
       // An ordinary account acts in its own township and nowhere else. Seeding it from `me` rather
       // than leaving it null keeps the value meaningful for the shell to display, while the client
-      // still only sends the header when the session has no township of its own.
-      actingTownshipId: me.townshipId ?? null,
-    }),
+      // still only sends the header when the session has no township of its own. A platform
+      // operator keeps the township they had selected — in memory, or remembered from before a
+      // refresh.
+      actingTownshipId:
+        me.townshipId ??
+        (prev.me?.id === me.id ? prev.actingTownshipId : null) ??
+        readActing(me.id),
+    })),
 
-  setActingTownship: (townshipId) => set({ actingTownshipId: townshipId }),
+  setActingTownship: (townshipId) =>
+    set((state) => {
+      if (state.me && !state.me.townshipId) writeActing(state.me.id, townshipId);
+      return { actingTownshipId: townshipId };
+    }),
 
   setUnauthenticated: (reason = null) =>
     set({ state: 'unauthenticated', me: null, endedReason: reason, actingTownshipId: null }),
@@ -134,7 +170,21 @@ export async function bootstrapSession(): Promise<void> {
 
   try {
     await sessionManager.refreshOnce();
-    store.setMe(await endpoints.auth.me());
+    const me = await endpoints.auth.me();
+    // A remembered township is checked before it is trusted: one archived, suspended or deleted
+    // since the last visit would otherwise land the operator on screens that all fail.
+    if (!me.townshipId && !me.mustResetPassword) {
+      const remembered = readActing(me.id);
+      if (remembered) {
+        try {
+          const township = await endpoints.platform.getTownship(remembered as never);
+          if (township.status !== 'ACTIVE') writeActing(me.id, null);
+        } catch {
+          writeActing(me.id, null);
+        }
+      }
+    }
+    store.setMe(me);
   } catch {
     // A dead refresh token on boot is the ordinary "came back a month later" case, not an error
     // worth showing. Land on login quietly.
@@ -143,6 +193,8 @@ export async function bootstrapSession(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  const me = useSessionStore.getState().me;
+  if (me && !me.townshipId) writeActing(me.id, null);
   await runLogout({
     client: apiClient,
     queryClient,

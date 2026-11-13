@@ -63,12 +63,23 @@ describe('subscription registry', () => {
     ]);
   });
 
-  it('never routes a resident or sales agent at a gate topic', () => {
-    for (const role of ['RESIDENT', 'SALES'] as const) {
-      const destinations = destinationsFor(role, { selectedGateId: GATE_A });
-      expect(destinations).toEqual(['/user/queue/visits', '/user/queue/notifications']);
-      expect(destinations.some((d) => d.startsWith('/topic/gate/'))).toBe(false);
-    }
+  it('never routes a resident at a gate topic', () => {
+    const destinations = destinationsFor('RESIDENT', { selectedGateId: GATE_A });
+    expect(destinations).toEqual(['/user/queue/visits', '/user/queue/notifications']);
+    expect(destinations.some((d) => d.startsWith('/topic/gate/'))).toBe(false);
+  });
+
+  it('adds the personal visit queue for a sales-flagged guard, on top of its gate', () => {
+    expect(destinationsFor('GUARD', { selectedGateId: GATE_A, sales: true })).toEqual([
+      `/topic/gate/${GATE_A}`,
+      '/user/queue/visits',
+      '/user/queue/notifications',
+    ]);
+    // The flag means nothing on a resident; it never widens their subscriptions.
+    expect(destinationsFor('RESIDENT', { sales: true })).toEqual([
+      '/user/queue/visits',
+      '/user/queue/notifications',
+    ]);
   });
 
   it('de-duplicates so a doubly-watched gate does not deliver every frame twice', () => {

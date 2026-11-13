@@ -48,10 +48,10 @@ public class UserService {
 
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
-    public PageResponse<UserResponse> list(UserRole role, Boolean active, UUID flatId, String search,
-                                           Pageable pageable) {
+    public PageResponse<UserResponse> list(UserRole role, Boolean sales, Boolean active, UUID flatId,
+                                           String search, Pageable pageable) {
         Specification<AppUser> specification =
-                filter(TenantContext.requireTownshipId(), role, active, flatId, search);
+                filter(TenantContext.requireTownshipId(), role, sales, active, flatId, search);
         return PageResponse.of(users.findAll(specification, pageable), mapper::toResponse);
     }
 
@@ -62,9 +62,13 @@ public class UserService {
     }
 
     /**
-     * Updates contact details only. Role, flat and login id are immutable by design: changing any of
-     * them would silently re-point historical visitor logs and audit rows at a different person.
-     * Those cases are a deactivate-and-reprovision, not an edit.
+     * Updates contact details and sales-team membership. Role, flat and login id are immutable by
+     * design: changing any of them would silently re-point historical visitor logs and audit rows at
+     * a different person. Those cases are a deactivate-and-reprovision, not an edit.
+     *
+     * <p>Sales membership is different -- it is a capability, not an identity, so moving someone on
+     * to or off the sales team is an edit. Taking it away also takes them off duty, so the guard's
+     * dropdown never offers an agent who can no longer decide the visit.
      */
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -89,9 +93,20 @@ public class UserService {
             }
             user.setEmail(email);
         }
+        if (request.sales() != null && request.sales() != user.isSales()) {
+            if (request.sales() && !user.getRole().canBeSales()) {
+                throw new BusinessValidationException("SALES_NOT_ALLOWED_FOR_ROLE",
+                        "Only ADMIN and GUARD accounts can be marked as sales.");
+            }
+            user.setSales(request.sales());
+            if (!request.sales()) {
+                user.setOnDuty(false);
+            }
+        }
 
         users.save(user);
-        audit.record(AuditAction.USER_UPDATED, "app_user", userId, null);
+        audit.record(AuditAction.USER_UPDATED, "app_user", userId,
+                request.sales() == null ? null : AuditService.detail("sales", user.isSales()));
         return mapper.toResponse(user);
     }
 
@@ -118,7 +133,10 @@ public class UserService {
             user.bumpTokenVersion();
             user.setOnDuty(false);
         }
-        users.save(user);
+        users.saveAndFlush(user);
+        // Mapped before revoking: the revocation is a bulk update that clears the persistence
+        // context, after which a resident's lazily loaded unit can no longer be read.
+        UserResponse response = mapper.toResponse(user);
         if (!active) {
             refreshTokens.revokeAllForUser(userId, "ACCOUNT_DEACTIVATED");
         }
@@ -126,10 +144,13 @@ public class UserService {
         audit.record(active ? AuditAction.USER_REACTIVATED : AuditAction.USER_DEACTIVATED,
                 "app_user", userId, null);
         log.info("User {} set active={} by {}", userId, active, SecurityUtils.currentUserId());
-        return mapper.toResponse(user);
+        return response;
     }
 
-    /** Sales agents mark themselves on or off duty; nobody else can move that flag. */
+    /**
+     * Sales agents mark themselves on or off duty; nobody else can move that flag. {@code ROLE_SALES}
+     * is derived from the account's sales flag, so this is "any member of the sales team".
+     */
     @PreAuthorize("hasRole('SALES')")
     @Transactional
     public UserResponse setOwnDuty(boolean onDuty) {
@@ -151,8 +172,8 @@ public class UserService {
     @PreAuthorize("hasAnyRole('GUARD','ADMIN')")
     @Transactional(readOnly = true)
     public List<SalesAgentResponse> onDutySalesAgents() {
-        return users.findByTownship_IdAndRoleAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
-                        TenantContext.requireTownshipId(), UserRole.SALES).stream()
+        return users.findByTownship_IdAndSalesTrueAndOnDutyTrueAndActiveTrueOrderByFullNameAsc(
+                        TenantContext.requireTownshipId()).stream()
                 .map(mapper::toSalesAgent)
                 .toList();
     }
@@ -163,8 +184,8 @@ public class UserService {
                 .orElseThrow(() -> NotFoundException.of("User", userId));
     }
 
-    private Specification<AppUser> filter(UUID townshipId, UserRole role, Boolean active, UUID flatId,
-                                          String search) {
+    private Specification<AppUser> filter(UUID townshipId, UserRole role, Boolean sales, Boolean active,
+                                          UUID flatId, String search) {
         return (root, query, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             // Not optional, and deliberately added before anything the caller controls.
@@ -172,11 +193,15 @@ public class UserService {
             if (role != null) {
                 predicates.add(builder.equal(root.get("role"), role));
             }
+            if (sales != null) {
+                predicates.add(builder.equal(root.get("sales"), sales));
+            }
             if (active != null) {
                 predicates.add(builder.equal(root.get("active"), active));
             }
             if (flatId != null) {
-                predicates.add(builder.equal(root.get("flat").get("id"), flatId));
+                // The attribute is "unit" since V4; "flat" no longer exists on the entity.
+                predicates.add(builder.equal(root.get("unit").get("id"), flatId));
             }
             if (search != null && !search.isBlank()) {
                 // Criteria binds this as a parameter, so injection is not the concern -- but LIKE

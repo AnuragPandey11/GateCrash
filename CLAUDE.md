@@ -48,7 +48,8 @@ Swagger UI: `http://localhost:8080/swagger-ui`.
 
 Under the **local** profile, `DevDataSeeder` seeds a usable township on startup — the `DEFAULT`
 township, block `Block A`, flats `A-101`–`A-104`, gate `Main Gate`, and one ready-to-use account per
-role (`superadmin`, `admin`, `guard-01`, `sales-01`, `A-101-1`) all sharing the password
+role (`superadmin`, `admin`, `guard-01`, `A-101-1`) plus a sales agent (`sales-01`, a GUARD with the
+sales flag) all sharing the password
 `Township#2026`. It is idempotent, never modifies an existing account, and **refuses to start if
 `app.bootstrap.seed-demo-data` is true outside local/test**. See `gatecrash-backend/README.md`.
 
@@ -125,8 +126,8 @@ Feature packages under `com.gatecrash.*` each own their entity, repository, serv
    actually the routed approver (resident's `flat_id` matches, or sales agent's own id matches) before
    applying the FSM transition.
 3. **DB constraints** (`CHECK`, `UNIQUE`, Postgres enum types) are the backstop, so a bug or race can never
-   persist an invalid row independent of the application layer (e.g. `client_routes_to_sales` CHECK on
-   `visitor_log`).
+   persist an invalid row independent of the application layer (e.g. `sales_meeting_routes_to_sales`
+   CHECK on `visitor_log`, `sales_is_staff` on `app_user`).
 
 When adding a new privileged endpoint, all three layers are expected, not optional — see
 `RbacNegativeTest` for the pattern of proving layer 1, and `VisitFsmTest`/`VisitStatusTest` for layer 2.
@@ -200,6 +201,19 @@ guard's screen. **Consistency rule:** `declared_occupancy` may never sit below a
 resident account count — provisioning raises it automatically, and lowering it below is a
 `409 OCCUPANCY_BELOW_RESIDENTS`. The invariant spans two tables, so it lives in the service layer.
 
+### Sales is a flag, not a role
+
+There is no `SALES` role (V6). A sales agent is an `ADMIN` or `GUARD` account with
+`app_user.is_sales = true` — the "Is Sales" tick-box in the console. `AppUserDetails` derives a
+`ROLE_SALES` authority from the flag, so `hasRole('SALES')` still means "member of the sales team",
+and because the principal is rebuilt from the row on every request, clearing the flag revokes it on
+the next call. DB backstops: `sales_is_staff` (only ADMIN/GUARD) and `on_duty_needs_sales`.
+
+Likewise there is no `CLIENT` visitor type. The guard ticks **Meet Sales Agent**
+(`visitor_log.meet_sales_agent`) and picks an on-duty agent; `sales_meeting_routes_to_sales` makes the
+tick and `approver_kind = 'SALES'` agree. A pass minted by a sales-flagged account sets it on
+redemption. `approver_kind` keeps its `SALES` value — it names *who a visit is routed to*, not a role.
+
 ### Two load-bearing entities
 
 - **`visitor_log`** (`VisitorLog`) — one row per physical arrival at the gate, walk-in or pass redemption.
@@ -253,13 +267,25 @@ always the single source of truth** both reconcile against — clients also have
 
 ### Notification targeting engine
 
-`AudienceResolver` compiles an `audienceRule` JSONB (`ALL`, `ALL_EXCEPT`, `ROLES`, `FLATS`, `BLOCKS`) into
+`AudienceResolver` compiles an `audienceRule` JSONB (`ALL`, `ALL_EXCEPT`, `ROLES`, `FLATS`, `BLOCKS`,
+`NODES`, `SALES_TEAM`) into
 one parameterized SQL query against `app_user` (+ `property_node` joins), anchored on the
 current township in **every** mode including `ALL` — the difference between "everyone here" and
-"everyone on the platform". The resolved set is
-materialized into `notification_recipient` for audit and read tracking, then device tokens are batched to
+"everyone on the platform". `NODES` is what the console sends: any mix of property nodes at any
+level (a tower, a floor, single flats), each meaning "everyone beneath it" via the materialized path;
+the drill-down picker keeps it compact (a whole tower is one id). The resolved set is materialized
+into `notification_recipient` for audit and read tracking, then device tokens are batched to
 FCM (multicast, ≤500/batch). `POST /notifications/preview` runs the same resolver read-only so an admin
 sees the blast radius before sending.
+
+### Community posts are rich text
+
+The console composes posts in Quill 2 (`features/community/rich-text-editor.tsx`), so `body` is HTML.
+`RichTextSanitizer` (jsoup allowlist) reduces it before storage — Quill's formats, `ql-*` classes only,
+https or raster `data:` images, YouTube/Vimeo iframes only — and `RichTextView` sanitises again with
+DOMPurify before rendering. Any new toolbar button needs the allowlist widened too. Images travel
+inline as data URIs until there is an upload endpoint, which is why the body cap is 3 MB. The mobile
+feed, when built, must render HTML.
 
 ### Auditing
 
@@ -275,7 +301,10 @@ persisted.
   `V2__super_admin_role.sql` (the enum label alone — PostgreSQL cannot *use* a new enum value in the
   transaction that adds it, and Flyway runs one transaction per migration), `V3__multi_tenancy.sql`,
   `V4__property_tree.sql`, `V5__property_types.sql` (nine more `property_type` labels — labels only,
-  split out for V2's reason). Note V4 *creates* enum types rather than adding labels to an existing one,
+  split out for V2's reason), `V6__sales_flag_and_rich_posts.sql` (SALES role → `is_sales` flag,
+  CLIENT visitor type → `meet_sales_agent`, plain-text posts → HTML). V6 *removes* enum labels, which
+  PostgreSQL can only do by rebuilding the type: rename, recreate, re-type the columns, and drop and
+  re-add every constraint and partial index that compares against it. Note V4 *creates* enum types rather than adding labels to an existing one,
   and a freshly created type **is** usable in the same transaction — so it needed no split.
 - Postgres `ENUM` columns map with `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` + `@Enumerated(EnumType.STRING)`;
   `JSONB` columns map with `@JdbcTypeCode(SqlTypes.JSON)`.
