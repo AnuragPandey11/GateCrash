@@ -53,12 +53,12 @@ export default {
         pending: { DEFAULT: token('--gc-pending'), fg: token('--gc-pending-fg') },
       },
       fontFamily: {
-        // Manrope for everything a person reads at working size: open apertures, generous
-        // x-height, tabular figures. Playfair Display only at display sizes — page titles, the big
-        // numbers — where its high contrast reads as craft rather than strain.
+        // One plain, humanist sans for everything: Source Sans 3. It reads like a well-made
+        // product rather than a template, holds up at small sizes, and has true tabular figures.
+        // Headings use the same family at a heavier weight — no decorative display face.
         sans: [
-          '"Manrope Variable"',
-          'Manrope',
+          '"Source Sans 3 Variable"',
+          '"Source Sans 3"',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
@@ -66,7 +66,7 @@ export default {
           'Roboto',
           'sans-serif',
         ],
-        display: ['"Playfair Display"', 'Georgia', '"Times New Roman"', 'serif'],
+        display: ['"Source Sans 3 Variable"', '"Source Sans 3"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         sm: 'var(--gc-radius-sm)',
@@ -79,9 +79,10 @@ export default {
         overlay: 'var(--gc-shadow-overlay)',
       },
       fontSize: {
-        // Type scale 12/14/16/20/24/32/48 (§10.1)
-        xs: ['0.75rem', { lineHeight: '1rem' }],
-        sm: ['0.875rem', { lineHeight: '1.375rem' }],
+        // Type scale 13/15/16/20/24/32/48 (§10.1). The two small steps are a pixel larger than the
+        // original 12/14 because Source Sans has a smaller x-height than the face it replaced.
+        xs: ['0.8125rem', { lineHeight: '1.125rem' }],
+        sm: ['0.9375rem', { lineHeight: '1.4rem' }],
         base: ['1rem', { lineHeight: '1.5rem' }],
         lg: ['1.25rem', { lineHeight: '1.75rem' }],
         xl: ['1.5rem', { lineHeight: '2rem' }],

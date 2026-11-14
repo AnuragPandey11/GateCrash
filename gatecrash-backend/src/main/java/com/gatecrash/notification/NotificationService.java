@@ -9,11 +9,13 @@ import com.gatecrash.common.exception.NotFoundException;
 import com.gatecrash.device.DeviceService;
 import com.gatecrash.notification.dto.NotificationDtos.AudiencePreviewResponse;
 import com.gatecrash.notification.dto.NotificationDtos.AudienceRule;
+import com.gatecrash.notification.dto.NotificationDtos.AudienceUserResponse;
 import com.gatecrash.notification.dto.NotificationDtos.CreateNotificationRequest;
 import com.gatecrash.notification.dto.NotificationDtos.InboxItemResponse;
 import com.gatecrash.notification.dto.NotificationDtos.NotificationResponse;
 import com.gatecrash.common.tenant.TenantContext;
 import com.gatecrash.security.SecurityUtils;
+import com.gatecrash.user.AppUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +65,7 @@ public class NotificationService {
     private final DeviceService devices;
     private final AuditService audit;
     private final AfterCommitExecutor afterCommit;
+    private final AppUserRepository users;
 
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -130,7 +133,7 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public PageResponse<InboxItemResponse> inbox(Pageable pageable) {
         UUID userId = SecurityUtils.currentUserId();
-        Page<NotificationRecipient> page = recipients.findByUserIdOrderByIdDesc(userId, pageable);
+        Page<NotificationRecipient> page = recipients.inboxOf(userId, pageable);
 
         // One lookup for the whole page rather than one per row.
         Map<UUID, Notification> byId = notifications
@@ -139,6 +142,26 @@ public class NotificationService {
                 .collect(Collectors.toMap(Notification::getId, Function.identity()));
 
         return PageResponse.of(page, row -> toInboxItem(row, byId.get(row.getNotificationId())));
+    }
+
+    /** Everything in the caller's inbox, read at once. Returns how many rows changed. */
+    @Transactional
+    public int markAllRead() {
+        return recipients.markAllRead(SecurityUtils.currentUserId(), OffsetDateTime.now());
+    }
+
+    /**
+     * The people list the composer shows under "Everyone": every active account of the township,
+     * which the admin can then narrow by unticking. Anchored on the acting township like every
+     * other read.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional(readOnly = true)
+    public List<AudienceUserResponse> audienceUsers() {
+        return users.findActiveForAudience(TenantContext.requireTownshipId()).stream()
+                .map(u -> new AudienceUserResponse(u.getId(), u.getFullName(), u.getLoginId(), u.getRole(),
+                        u.isSales(), u.getUnit() == null ? null : u.getUnit().getCode()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

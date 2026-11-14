@@ -29,7 +29,9 @@ public final class NotificationDtos {
             @Size(max = 4) List<UserRole> roles,
             @Size(max = 2000) List<UUID> flatIds,
             @Size(max = 200) List<UUID> blockIds,
-            @Size(max = 2000) List<UUID> nodeIds) {
+            @Size(max = 2000) List<UUID> nodeIds,
+            /** USERS: the exact accounts the admin ticked in the people list. */
+            @Size(max = 5000) List<UUID> userIds) {
 
         public enum Mode {
             /** Every active account. */
@@ -49,7 +51,12 @@ public final class NotificationDtos {
              */
             NODES,
             /** Every active member of the sales team -- accounts with the sales flag, whatever their role. */
-            SALES_TEAM
+            SALES_TEAM,
+            /**
+             * Exactly the listed accounts, as ticked in the composer's people list. Still anchored
+             * on the township: an id from another township, or a deactivated account, is dropped.
+             */
+            USERS
         }
     }
 
@@ -87,5 +94,15 @@ public final class NotificationDtos {
     }
 
     public record UnreadCountResponse(long unread) {
+    }
+
+    /** One addressable person, for the composer's people list. */
+    public record AudienceUserResponse(
+            UUID id,
+            String fullName,
+            String loginId,
+            UserRole role,
+            boolean sales,
+            String unitCode) {
     }
 }

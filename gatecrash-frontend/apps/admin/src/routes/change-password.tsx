@@ -1,10 +1,12 @@
 import { changePasswordRequestSchema, isApiException } from '@gatecrash/api';
-import { SERVER_DEFAULTS } from '@gatecrash/core';
+import { SERVER_DEFAULTS, isPlatformOperator } from '@gatecrash/core';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import { homeFor } from '@/components/nav-config';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -55,6 +57,7 @@ const STRENGTH_COLOUR = ['bg-danger', 'bg-danger', 'bg-warning', 'bg-info', 'bg-
 export function ChangePasswordRoute() {
   const { t } = useTranslation();
   const setMe = useSessionStore((s) => s.setMe);
+  const navigate = useNavigate();
   const forced = useSessionStore((s) => s.state === 'mustResetPassword');
 
   const form = useForm<FormValues>({
@@ -72,8 +75,15 @@ export function ChangePasswordRoute() {
         newPassword: values.newPassword,
       });
       // Re-read the session: `mustResetPassword` is now false and the state machine moves on.
-      setMe(await endpoints.auth.me());
+      const me = await endpoints.auth.me();
+      setMe(me);
       toast.success(t('changePassword.success'));
+      // Then leave this screen. Staying here after a forced change left the URL on
+      // /change-password, which the signed-in app also serves (the voluntary change), so the
+      // person saw the same form again and reasonably thought they had to change it twice.
+      const townshipSelected =
+        !isPlatformOperator(me.role) || Boolean(useSessionStore.getState().actingTownshipId);
+      navigate(homeFor(me.role, townshipSelected), { replace: true });
     } catch (error) {
       const applied = applyFieldErrors(
         error,

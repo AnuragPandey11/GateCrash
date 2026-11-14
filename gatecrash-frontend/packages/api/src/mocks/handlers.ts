@@ -273,6 +273,14 @@ export function createHandlers(base = DEFAULT_API_URL): HttpHandler[] {
     ),
     http.get(url('/notifications/mine', base), () => HttpResponse.json(page([], { size: 25 }))),
     http.get(url('/notifications/mine/unread-count', base), () => HttpResponse.json({ unread: 0 })),
+    http.post(url('/notifications/mine/read-all', base), () => HttpResponse.json({ unread: 0 })),
+    http.get(url('/notifications/audience-users', base), () =>
+      HttpResponse.json([
+        { id: '9a000000-0000-4000-8000-000000000001', fullName: 'Asha Rao', loginId: 'A-101-1', role: 'RESIDENT', sales: false, unitCode: 'A-101' },
+        { id: '9a000000-0000-4000-8000-000000000002', fullName: 'Gate Guard', loginId: 'guard-01', role: 'GUARD', sales: false },
+        { id: '9a000000-0000-4000-8000-000000000003', fullName: 'Priya Nair', loginId: 'admin', role: 'ADMIN', sales: false },
+      ]),
+    ),
     http.patch(url('/notifications/mine/:id/read', base), ({ params }) =>
       HttpResponse.json({
         id: params.id,

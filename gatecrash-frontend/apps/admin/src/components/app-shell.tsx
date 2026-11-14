@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { signOut, useSessionStore } from '@/lib/session';
 import { ConnectionPill } from './connection-pill';
 import { navFor, type NavItem, type NavSectionDef } from './nav-config';
+import { NotificationBell } from './notification-bell';
 import { ThemeToggle } from './theme-toggle';
 import { Button } from './ui/button';
 
@@ -128,6 +129,9 @@ export function AppShell() {
                   one and never needs telling. */}
               {platformOperator ? <ActingTownship townshipId={actingTownshipId} /> : null}
               <ConnectionPill />
+              {/* Everyone who lives in a township gets the bell; a platform operator only once a
+                  township is selected, since every list behind it is township-scoped. */}
+              {me && (me.townshipId || actingTownshipId) ? <NotificationBell /> : null}
               <ThemeToggle />
             </div>
           </header>

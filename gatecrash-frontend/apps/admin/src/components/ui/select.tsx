@@ -1,5 +1,5 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
 import { cn } from '@/lib/cn';
 
@@ -35,14 +35,23 @@ export const SelectContent = forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       position={position}
+      // Every dropdown is a bounded, scrolling list: never taller than the room left on screen
+      // (or 20rem), with a visible scrollbar and arrow buttons at either end, so a long list —
+      // time slots, units, gates — reads as "scroll for more" instead of stopping at the edge.
       className={cn(
-        'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-[12px] border border-border/80 bg-surface shadow-overlay data-[state=open]:animate-pop-in',
+        'relative z-50 flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] flex-col overflow-hidden rounded-[12px] border border-border/80 bg-surface shadow-overlay data-[state=open]:animate-pop-in',
         position === 'popper' && 'w-[var(--radix-select-trigger-width)] translate-y-1',
         className,
       )}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.ScrollUpButton className="flex h-7 shrink-0 cursor-default items-center justify-center border-b border-border/60 text-text-muted">
+        <ChevronUp className="size-4" />
+      </SelectPrimitive.ScrollUpButton>
+      <SelectPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto p-1">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.ScrollDownButton className="flex h-7 shrink-0 cursor-default items-center justify-center border-t border-border/60 text-text-muted">
+        <ChevronDown className="size-4" />
+      </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ));

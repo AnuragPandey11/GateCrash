@@ -65,6 +65,7 @@ public class AudienceResolver {
             case NODES -> users.findActiveUserIdsUnderNodes(townshipId,
                     requireIds(rule.nodeIds(), "nodeIds"));
             case SALES_TEAM -> users.findActiveSalesUserIds(townshipId);
+            case USERS -> users.findActiveUserIdsAmong(townshipId, requireIds(rule.userIds(), "userIds"));
         };
     }
 

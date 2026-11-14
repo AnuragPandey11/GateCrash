@@ -12,6 +12,7 @@ import { ChangePasswordRoute } from './change-password';
 import { CommunityRoute } from './community';
 import { GateRoute } from './gate';
 import { HomeRoute } from './home';
+import { InboxRoute } from './inbox';
 import { LoginRoute } from './login';
 import { NotFoundRoute } from './not-found';
 import { NotificationsRoute } from './notifications';
@@ -106,6 +107,7 @@ export function AppRoutes() {
       { path: '/visits', element: <VisitsRoute /> },
       { path: '/visits/:visitId', element: <VisitsRoute /> },
       { path: '/notifications', element: <NotificationsRoute /> },
+      { path: '/inbox', element: <InboxRoute /> },
       { path: '/community', element: <CommunityRoute /> },
       { path: '/users', element: <UsersRoute /> },
       { path: '/township', element: <TownshipRoute /> },
@@ -117,10 +119,17 @@ export function AppRoutes() {
       { path: '/staff', element: <StaffRoute office /> },
     );
   }
-  if (role === 'GUARD') screens.push({ path: '/gate', element: <GateRoute /> });
+  if (role === 'GUARD') {
+    screens.push(
+      { path: '/gate', element: <GateRoute /> },
+      { path: '/inbox', element: <InboxRoute /> },
+      { path: '/community', element: <CommunityRoute readOnly /> },
+    );
+  }
   if (role === 'RESIDENT') {
     screens.push(
       { path: '/home', element: <HomeRoute /> },
+      { path: '/inbox', element: <InboxRoute /> },
       { path: '/passes', element: <PassesRoute /> },
       { path: '/community', element: <CommunityRoute readOnly /> },
       { path: '/bills', element: <BillsRoute /> },

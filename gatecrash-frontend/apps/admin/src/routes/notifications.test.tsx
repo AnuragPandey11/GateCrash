@@ -20,12 +20,28 @@ async function fillMessage(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/^Message/), 'Water will be off in Block A on Tuesday.');
 }
 
+/** Nobody is selected by default; "Select all" in the people list is the deliberate everyone. */
+async function selectEveryone(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('checkbox', { name: 'Select all' }));
+}
+
 describe('send gating', () => {
+  it('starts with nobody selected, so Send is disabled until someone is chosen', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<NotificationsRoute />);
+    await fillMessage(user);
+
+    expect(await screen.findByRole('checkbox', { name: 'Select all' })).toHaveAttribute('data-state', 'unchecked');
+    expect(screen.getByText('0 of 3 selected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Send/ })).toBeDisabled();
+  });
+
   it('keeps Send disabled until the preview resolves for the current rule', async () => {
     const user = userEvent.setup();
     renderWithProviders(<NotificationsRoute />);
 
     await fillMessage(user);
+    await selectEveryone(user);
 
     // Once the debounced preview lands, the button carries the count — which is the whole
     // point: an admin clicks "Send to 312 people", not "Send".
@@ -74,6 +90,7 @@ describe('confirmation', () => {
     const user = userEvent.setup();
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
+    await selectEveryone(user);
 
     await user.click(await screen.findByRole('button', { name: 'Send to 312 people' }, { timeout: 3000 }));
 
@@ -94,6 +111,7 @@ describe('confirmation', () => {
 
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
+    await selectEveryone(user);
     await user.click(await screen.findByRole('button', { name: 'Send to 312 people' }, { timeout: 3000 }));
 
     // Opening the dialog must not have sent anything.
@@ -121,6 +139,7 @@ describe('confirmation', () => {
 
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
+    await selectEveryone(user);
     await user.click(await screen.findByRole('button', { name: 'Send to 312 people' }, { timeout: 3000 }));
     await user.click(await screen.findByRole('button', { name: 'Cancel' }));
 
@@ -154,6 +173,7 @@ describe('audience rule construction', () => {
     );
 
     await user.click(screen.getByRole('radio', { name: /^Everyone/ }));
+    await selectEveryone(user);
     await waitFor(
       () => {
         const last = previews[previews.length - 1] as Record<string, unknown>;
@@ -213,6 +233,7 @@ describe('failures', () => {
 
     renderWithProviders(<NotificationsRoute />);
     await fillMessage(user);
+    await selectEveryone(user);
     await user.click(await screen.findByRole('button', { name: 'Send to 312 people' }, { timeout: 3000 }));
     const dialog = await screen.findByRole('dialog');
     await user.click(await within2(dialog, 'Send to 312 people'));

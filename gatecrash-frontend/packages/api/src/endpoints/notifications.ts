@@ -1,7 +1,18 @@
 import type { AudienceRule } from '@gatecrash/core';
 import { buildAudienceRule } from '@gatecrash/core';
 import type { InboxItemId } from '@gatecrash/core';
+import type { UserRole } from '@gatecrash/core';
 import type { ApiClient } from '../client';
+
+/** One addressable person in the composer's people list. */
+export interface AudienceUser {
+  id: string;
+  fullName: string;
+  loginId: string;
+  role: UserRole;
+  sales: boolean;
+  unitCode?: string;
+}
 import type { PageArgs, PageResponse } from '../pagination';
 import { toPageParams } from '../pagination';
 import type {
@@ -62,6 +73,15 @@ export function notificationEndpoints(client: ApiClient) {
 
     markRead(id: InboxItemId): Promise<InboxItemResponse> {
       return client.patch<InboxItemResponse>(`notifications/mine/${id}/read`);
+    },
+
+    markAllRead(): Promise<UnreadCountResponse> {
+      return client.post<UnreadCountResponse>('notifications/mine/read-all');
+    },
+
+    /** ADMIN: every active account of the township, for the composer's people list. */
+    audienceUsers(signal?: AbortSignal): Promise<AudienceUser[]> {
+      return client.get<AudienceUser[]>('notifications/audience-users', signal ? { signal } : {});
     },
   };
 }

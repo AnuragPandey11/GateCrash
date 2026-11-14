@@ -123,6 +123,7 @@ export const AUDIENCE_MODES = [
   'BLOCKS',
   'NODES',
   'SALES_TEAM',
+  'USERS',
 ] as const;
 export type AudienceMode = (typeof AUDIENCE_MODES)[number];
 

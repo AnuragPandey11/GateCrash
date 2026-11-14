@@ -32,10 +32,26 @@ export interface TokenStore {
   getRefreshToken(): Promise<string | null>;
   setTokens(tokens: Tokens): Promise<void>;
   clear(): Promise<void>;
+  /** Drop the in-memory access token only, leaving the stored refresh token in place. */
+  forgetAccessToken?(): void;
 }
 
 /** The single `localStorage` key this app owns. */
 export const REFRESH_TOKEN_KEY = 'gc.rt';
+
+const REFRESH_LOCK = 'gatecrash-auth-refresh';
+
+/**
+ * Run `fn` while holding a lock shared by every tab of this origin (Web Locks API). Where the API
+ * is missing — React Native, old browsers, tests — `fn` simply runs; the in-tab single-flight
+ * still applies.
+ */
+function withCrossTabLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const locks = (globalThis as { navigator?: { locks?: { request?: unknown } } }).navigator?.locks as
+    | { request(name: string, callback: () => Promise<T>): Promise<T> }
+    | undefined;
+  return typeof locks?.request === 'function' ? locks.request(name, fn) : fn();
+}
 
 /** Thrown when there is nothing left to refresh with. The app must route to login. */
 export class SessionExpired extends Error {
@@ -79,6 +95,10 @@ export function createWebTokenStore(
       } catch {
         /* nothing to do */
       }
+    },
+
+    forgetAccessToken() {
+      accessToken = null;
     },
   };
 }
@@ -199,7 +219,11 @@ export class SessionManager {
   async refreshOnce(): Promise<Tokens> {
     if (this.inFlight) return this.inFlight;
 
-    this.inFlight = (async () => {
+    // Other tabs share the stored refresh token, and each refresh rotates it. Two tabs refreshing
+    // at once would both send the same token; the server reads the second as theft and revokes
+    // the whole family, signing every tab out. A cross-tab lock serialises them, and because the
+    // token is read *inside* the lock, a tab that waited sends the one the other tab just stored.
+    this.inFlight = withCrossTabLock(REFRESH_LOCK, async () => {
       const refreshToken = await this.store.getRefreshToken();
       if (!refreshToken) {
         this.endSession('REFRESH_MISSING');
@@ -239,11 +263,22 @@ export class SessionManager {
       // the old token is still stored would send a revoked one and take the family down.
       await this.adopt(body);
       return body;
-    })().finally(() => {
+    }).finally(() => {
       this.inFlight = null;
     });
 
     return this.inFlight;
+  }
+
+  /**
+   * Forget this tab's access token without touching the shared refresh token. Used when another
+   * tab has signed in as someone else: the next refresh picks up the browser's current session.
+   */
+  forgetAccessToken(): void {
+    this.expiresAt = null;
+    this.currentUserId = null;
+    this.sessionTownshipId = null;
+    this.store.forgetAccessToken?.();
   }
 
   /** Local teardown. The `POST /auth/logout` call is the caller's job (see `endSessionRemote`). */

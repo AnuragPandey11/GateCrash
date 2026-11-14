@@ -142,6 +142,22 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID>, JpaSpec
     List<UUID> findActiveUserIdsByUnitIds(@Param("townshipId") UUID townshipId,
                                           @Param("unitIds") Collection<UUID> unitIds);
 
+    /** The listed accounts that are active and belong to this township; anything else is dropped. */
+    @Query("""
+           select u.id from AppUser u
+            where u.active = true and u.township.id = :townshipId and u.id in :ids
+           """)
+    List<UUID> findActiveUserIdsAmong(@Param("townshipId") UUID townshipId,
+                                      @Param("ids") Collection<UUID> ids);
+
+    /** Everyone a township admin can address, with their home, for the composer's people list. */
+    @Query("""
+           select u from AppUser u left join fetch u.unit
+            where u.active = true and u.township.id = :townshipId
+            order by u.fullName
+           """)
+    List<AppUser> findActiveForAudience(@Param("townshipId") UUID townshipId);
+
     /**
      * Everyone living anywhere beneath the named nodes, at any depth.
      *

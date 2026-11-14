@@ -44,6 +44,7 @@ import { useDebounced } from '@/lib/use-debounced';
 import { toast } from '@/lib/toast';
 
 const TITLE_MAX = 200;
+const NOBODY: AudienceRule = { mode: 'USERS', userIds: [] };
 const BODY_MAX = 2000;
 
 /**
@@ -107,7 +108,9 @@ function Composer() {
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [rule, setRule] = useState<AudienceRule>({ mode: 'ALL' });
+  // Nobody is selected until the admin chooses: a blast to the whole township is a deliberate
+  // "Select all", never the form's starting state.
+  const [rule, setRule] = useState<AudienceRule>(NOBODY);
   const [confirming, setConfirming] = useState(false);
   const formIsEmpty = title.trim() === '' && body.trim() === '';
 
@@ -137,7 +140,7 @@ function Composer() {
       toast.success(t('notifications.compose.sent', { count: recipientCount }));
       setTitle('');
       setBody('');
-      setRule({ mode: 'ALL' });
+      setRule(NOBODY);
       setConfirming(false);
     } catch (error) {
       // The form stays filled — never clear user input on error (§11.1).

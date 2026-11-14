@@ -168,7 +168,7 @@ function BookingPanel({ amenity }: { amenity: Amenity }) {
         {availability.isPending ? (
           <LoadingState />
         ) : (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="scroll-panel -mx-1 grid max-h-[22rem] grid-cols-3 gap-2 overflow-y-auto px-1 py-1 sm:grid-cols-4 lg:grid-cols-6">
             {slots.map((slot, index) => {
               const inSelection = start !== null && index >= start && index < start + count;
               return (

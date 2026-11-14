@@ -72,7 +72,7 @@ class AudienceResolverTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("ALL resolves every active account")
     void modeAll() {
-        assertThat(resolve(new AudienceRule(Mode.ALL, null, null, null, null)))
+        assertThat(resolve(new AudienceRule(Mode.ALL, null, null, null, null, null)))
                 .containsExactlyInAnyOrder(admin.getId(), guard.getId(), sales.getId(),
                         residentA1.getId(), residentA2.getId(), residentB1.getId());
     }
@@ -83,7 +83,7 @@ class AudienceResolverTest extends AbstractIntegrationTest {
         guard.setActive(false);
         users.save(guard);
 
-        assertThat(resolve(new AudienceRule(Mode.ALL, null, null, null, null)))
+        assertThat(resolve(new AudienceRule(Mode.ALL, null, null, null, null, null)))
                 .doesNotContain(guard.getId())
                 .hasSize(5);
     }
@@ -91,7 +91,7 @@ class AudienceResolverTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("ALL_EXCEPT removes the listed roles")
     void modeAllExcept() {
-        assertThat(resolve(new AudienceRule(Mode.ALL_EXCEPT, List.of(UserRole.GUARD), null, null, null)))
+        assertThat(resolve(new AudienceRule(Mode.ALL_EXCEPT, List.of(UserRole.GUARD), null, null, null, null)))
                 // The sales agent is a GUARD with the sales flag, so excluding guards excludes them too.
                 .doesNotContain(guard.getId(), sales.getId())
                 .containsExactlyInAnyOrder(admin.getId(), residentA1.getId(),
@@ -101,14 +101,14 @@ class AudienceResolverTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("ROLES keeps only the listed roles")
     void modeRoles() {
-        assertThat(resolve(new AudienceRule(Mode.ROLES, List.of(UserRole.ADMIN), null, null, null)))
+        assertThat(resolve(new AudienceRule(Mode.ROLES, List.of(UserRole.ADMIN), null, null, null, null)))
                 .containsExactly(admin.getId());
     }
 
     @Test
     @DisplayName("SALES_TEAM reaches accounts with the sales flag, whatever their role")
     void modeSalesTeam() {
-        assertThat(resolve(new AudienceRule(Mode.SALES_TEAM, null, null, null, null)))
+        assertThat(resolve(new AudienceRule(Mode.SALES_TEAM, null, null, null, null, null)))
                 .containsExactly(sales.getId());
     }
 
@@ -116,24 +116,24 @@ class AudienceResolverTest extends AbstractIntegrationTest {
     @DisplayName("NODES mixes levels: a whole block plus one unit of another")
     void modeNodes() {
         assertThat(resolve(new AudienceRule(Mode.NODES, null, null, null,
-                List.of(blockA.getId(), flatB1.getId()))))
+                List.of(blockA.getId(), flatB1.getId()), null)))
                 .containsExactlyInAnyOrder(residentA1.getId(), residentA2.getId(), residentB1.getId());
 
-        assertThat(resolve(new AudienceRule(Mode.NODES, null, null, null, List.of(flatA1.getId()))))
+        assertThat(resolve(new AudienceRule(Mode.NODES, null, null, null, List.of(flatA1.getId()), null)))
                 .containsExactly(residentA1.getId());
     }
 
     @Test
     @DisplayName("FLATS resolves the residents of the given flats")
     void modeFlats() {
-        assertThat(resolve(new AudienceRule(Mode.FLATS, null, List.of(flatA1.getId()), null, null)))
+        assertThat(resolve(new AudienceRule(Mode.FLATS, null, List.of(flatA1.getId()), null, null, null)))
                 .containsExactly(residentA1.getId());
     }
 
     @Test
     @DisplayName("BLOCKS resolves every resident in the given blocks")
     void modeBlocks() {
-        assertThat(resolve(new AudienceRule(Mode.BLOCKS, null, null, List.of(blockA.getId()), null)))
+        assertThat(resolve(new AudienceRule(Mode.BLOCKS, null, null, List.of(blockA.getId()), null, null)))
                 .containsExactlyInAnyOrder(residentA1.getId(), residentA2.getId())
                 .doesNotContain(residentB1.getId());
     }

@@ -19,6 +19,8 @@ export interface AudienceRule {
    * drill-down picker sends the most compact form — a whole tower as one id, not its 200 flats.
    */
   nodeIds?: PropertyNodeId[] | null;
+  /** USERS: exactly the accounts ticked in the composer's people list. */
+  userIds?: string[] | null;
 }
 
 /** Backend `@Size` caps on the rule's lists (§4.7). */
@@ -27,6 +29,7 @@ export const AUDIENCE_LIMITS = {
   flatIds: 2000,
   blockIds: 200,
   nodeIds: 2000,
+  userIds: 5000,
 } as const;
 
 /** The modes the composer offers, in the order it offers them. */
@@ -55,6 +58,8 @@ export function buildAudienceRule(draft: AudienceRule): AudienceRule {
       return { mode: 'NODES', nodeIds: draft.nodeIds ?? [] };
     case 'SALES_TEAM':
       return { mode: 'SALES_TEAM' };
+    case 'USERS':
+      return { mode: 'USERS', userIds: draft.userIds ?? [] };
   }
 }
 
@@ -66,7 +71,9 @@ export type AudienceRuleError =
   | 'BLOCKS_REQUIRED'
   | 'BLOCKS_TOO_MANY'
   | 'NODES_REQUIRED'
-  | 'NODES_TOO_MANY';
+  | 'NODES_TOO_MANY'
+  | 'USERS_REQUIRED'
+  | 'USERS_TOO_MANY';
 
 /** Null when the rule is sendable; otherwise the reason, for an inline message on the builder. */
 export function validateAudienceRule(rule: AudienceRule): AudienceRuleError | null {
@@ -74,6 +81,12 @@ export function validateAudienceRule(rule: AudienceRule): AudienceRuleError | nu
     case 'ALL':
     case 'SALES_TEAM':
       return null;
+    case 'USERS': {
+      const users = rule.userIds ?? [];
+      if (users.length === 0) return 'USERS_REQUIRED';
+      if (users.length > AUDIENCE_LIMITS.userIds) return 'USERS_TOO_MANY';
+      return null;
+    }
     case 'NODES': {
       const nodes = rule.nodeIds ?? [];
       if (nodes.length === 0) return 'NODES_REQUIRED';
@@ -115,6 +128,7 @@ export function audienceRuleKey(rule: AudienceRule): string {
   if (normalised.flatIds) parts.push(`f:${[...normalised.flatIds].sort().join(',')}`);
   if (normalised.blockIds) parts.push(`b:${[...normalised.blockIds].sort().join(',')}`);
   if (normalised.nodeIds) parts.push(`n:${[...normalised.nodeIds].sort().join(',')}`);
+  if (normalised.userIds) parts.push(`u:${[...normalised.userIds].sort().join(',')}`);
   return parts.join('|');
 }
 
@@ -153,5 +167,9 @@ export function describeAudienceRule(
       return names(rule.nodeIds ?? [], lookup?.node, 'location');
     case 'SALES_TEAM':
       return 'Sales team';
+    case 'USERS': {
+      const count = (rule.userIds ?? []).length;
+      return `${count} ${count === 1 ? 'person' : 'people'}`;
+    }
   }
 }

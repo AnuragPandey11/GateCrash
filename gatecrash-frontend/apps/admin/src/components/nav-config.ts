@@ -1,7 +1,9 @@
 import type { UserRole } from '@gatecrash/core';
 import {
   BadgeIndianRupee,
+  Bell,
   BellRing,
+  Inbox,
   Building2,
   DoorOpen,
   Dumbbell,
@@ -49,7 +51,9 @@ export type NavKey =
   | 'nav.support'
   | 'nav.rules'
   | 'nav.helpers'
-  | 'nav.staff';
+  | 'nav.staff'
+  | 'nav.inbox'
+  | 'nav.myInbox';
 
 export type SectionKey =
   | 'nav.sectionPlatform'
@@ -74,6 +78,7 @@ const OFFICE_TOWNSHIP: NavItem[] = [
   { to: '/occupancy', key: 'nav.occupancy', icon: LayoutDashboard },
   { to: '/visits', key: 'nav.visits', icon: ScrollText },
   { to: '/notifications', key: 'nav.notifications', icon: Megaphone },
+  { to: '/inbox', key: 'nav.myInbox', icon: Inbox },
   { to: '/community', key: 'nav.community', icon: MessageSquare },
   { to: '/users', key: 'nav.users', icon: Users },
   { to: '/township', key: 'nav.township', icon: Building2 },
@@ -117,13 +122,24 @@ export function navFor(input: {
         ...salesSection,
       ];
     case 'GUARD':
-      return [{ key: 'nav.sectionGate', items: [{ to: '/gate', key: 'nav.gate', icon: DoorOpen }] }, ...salesSection];
+      return [
+        {
+          key: 'nav.sectionGate',
+          items: [
+            { to: '/gate', key: 'nav.gate', icon: DoorOpen },
+            { to: '/inbox', key: 'nav.inbox', icon: Bell },
+            { to: '/community', key: 'nav.community', icon: MessageSquare },
+          ],
+        },
+        ...salesSection,
+      ];
     case 'RESIDENT':
       return [
         {
           key: 'nav.sectionHome',
           items: [
             { to: '/home', key: 'nav.home', icon: Home },
+            { to: '/inbox', key: 'nav.inbox', icon: Bell },
             { to: '/passes', key: 'nav.passes', icon: Ticket },
             { to: '/community', key: 'nav.community', icon: MessageSquare },
           ],

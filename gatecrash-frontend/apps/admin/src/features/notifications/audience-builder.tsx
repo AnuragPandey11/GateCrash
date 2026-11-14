@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useNomenclature } from '@/features/property/use-nomenclature';
 import { cn } from '@/lib/cn';
+import { PeoplePicker } from './people-picker';
 import { PropertyPicker } from './property-picker';
 
 /**
@@ -62,14 +63,15 @@ export function AudienceBuilder({ rule, onChange, error }: AudienceBuilderProps)
       <div role="radiogroup" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {COMPOSER_AUDIENCE_MODES.map((mode) => {
           const Icon = MODE_ICONS[mode];
-          const active = rule.mode === mode;
+          // A USERS rule is "Everyone" with some people unticked, so the Everyone card stays lit.
+          const active = rule.mode === mode || (mode === 'ALL' && rule.mode === 'USERS');
           return (
             <button
               key={mode}
               type="button"
               role="radio"
               aria-checked={active}
-              onClick={() => onChange({ ...rule, mode })}
+              onClick={() => onChange(mode === 'ALL' ? { mode: 'USERS', userIds: [] } : { ...rule, mode })}
               className={cn(
                 'flex items-start gap-3 rounded-[14px] border p-4 text-left transition-all duration-300 ease-out-expo',
                 active
@@ -94,10 +96,12 @@ export function AudienceBuilder({ rule, onChange, error }: AudienceBuilderProps)
         })}
       </div>
 
-      {error ? (
+      {error && error !== 'USERS_REQUIRED' ? (
         <p role="alert" className="text-sm text-danger">
           {t(`notifications.compose.errors.${error}`, {
-            max: error.startsWith('ROLES')
+            max: error.startsWith('USERS')
+              ? AUDIENCE_LIMITS.userIds
+              : error.startsWith('ROLES')
               ? AUDIENCE_LIMITS.roles
               : error.startsWith('NODES')
                 ? AUDIENCE_LIMITS.nodeIds
@@ -107,6 +111,8 @@ export function AudienceBuilder({ rule, onChange, error }: AudienceBuilderProps)
           })}
         </p>
       ) : null}
+
+      {rule.mode === 'ALL' || rule.mode === 'USERS' ? <PeoplePicker rule={rule} onChange={onChange} /> : null}
 
       {rule.mode === 'NODES' ? (
         <PropertyPicker

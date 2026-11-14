@@ -125,11 +125,11 @@ class RbacNegativeTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("a guard cannot read the community feed")
-    void guardCannotReadFeed() throws Exception {
+    @DisplayName("a guard can read the community feed (they live in the society too), but not publish to it")
+    void guardReadsFeed() throws Exception {
         mockMvc.perform(get("/api/v1/community/posts")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     // ----- guard-only surface -----------------------------------------------------------------

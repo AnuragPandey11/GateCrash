@@ -67,7 +67,7 @@ public class CommunityService {
         return toResponse(post, authorName);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN','RESIDENT','SALES')")
+    @PreAuthorize("hasAnyRole('ADMIN','RESIDENT','GUARD','SALES')")
     @Transactional(readOnly = true)
     public PageResponse<PostResponse> feed(Pageable pageable) {
         Page<CommunityPost> page = posts.findByTownshipIdOrderByPinnedDescPublishedAtDesc(

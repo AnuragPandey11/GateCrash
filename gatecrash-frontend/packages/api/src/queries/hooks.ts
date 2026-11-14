@@ -238,6 +238,28 @@ export function useUnreadCount() {
   });
 }
 
+export function useMarkAllRead() {
+  const api = useEndpoints();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.notifications.markAllRead(),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.inbox.all });
+    },
+  });
+}
+
+/** The composer's people list. Fetched only once the admin opens it. */
+export function useAudienceUsers(enabled: boolean) {
+  const api = useEndpoints();
+  return useQuery({
+    queryKey: ['admin', 'audience-users'] as const,
+    queryFn: ({ signal }) => api.notifications.audienceUsers(signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useMarkRead() {
   const api = useEndpoints();
   const qc = useQueryClient();

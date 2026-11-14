@@ -252,6 +252,7 @@ export const audienceRuleSchema = z.object({
   flatIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.flatIds).optional(),
   blockIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.blockIds).optional(),
   nodeIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.nodeIds).optional(),
+  userIds: z.array(z.string().uuid()).max(AUDIENCE_LIMITS.userIds).optional(),
 });
 
 export const createNotificationRequestSchema = z.object({

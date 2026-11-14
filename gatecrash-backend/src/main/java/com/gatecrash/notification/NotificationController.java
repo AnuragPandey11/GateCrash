@@ -3,6 +3,7 @@ package com.gatecrash.notification;
 import com.gatecrash.common.PageResponse;
 import com.gatecrash.notification.dto.NotificationDtos.AudiencePreviewResponse;
 import com.gatecrash.notification.dto.NotificationDtos.AudienceRule;
+import com.gatecrash.notification.dto.NotificationDtos.AudienceUserResponse;
 import com.gatecrash.notification.dto.NotificationDtos.CreateNotificationRequest;
 import com.gatecrash.notification.dto.NotificationDtos.InboxItemResponse;
 import com.gatecrash.notification.dto.NotificationDtos.NotificationResponse;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -67,6 +69,19 @@ public class NotificationController {
     @Operation(summary = "Unread badge count")
     public UnreadCountResponse unreadCount() {
         return new UnreadCountResponse(notifications.unreadCount());
+    }
+
+    @PostMapping("/mine/read-all")
+    @Operation(summary = "Mark the whole inbox read")
+    public UnreadCountResponse markAllRead() {
+        notifications.markAllRead();
+        return new UnreadCountResponse(0);
+    }
+
+    @GetMapping("/audience-users")
+    @Operation(summary = "Every active account of the township, for the composer's people list")
+    public List<AudienceUserResponse> audienceUsers() {
+        return notifications.audienceUsers();
     }
 
     @PatchMapping("/mine/{id}/read")

@@ -81,13 +81,31 @@ function writeActing(userId: string, townshipId: string | null): void {
   }
 }
 
+/**
+ * Who this browser is signed in as. The refresh token is shared by every tab (it lives in
+ * `localStorage`), so the browser holds exactly one session; this key is how the other tabs learn
+ * that it changed. Without it, signing in as a new user in a second tab silently swapped the
+ * first tab's tokens while it still showed — and acted as — the previous account.
+ */
+const SESSION_USER_KEY = 'gc.session-user';
+
+function writeSessionUser(userId: string | null): void {
+  try {
+    if (userId) localStorage.setItem(SESSION_USER_KEY, userId);
+    else localStorage.removeItem(SESSION_USER_KEY);
+  } catch {
+    // Private mode: tabs simply do not coordinate. Each still works on its own.
+  }
+}
+
 export const useSessionStore = create<SessionStore>((set) => ({
   state: 'loading',
   me: null,
   endedReason: null,
   actingTownshipId: null,
 
-  setMe: (me) =>
+  setMe: (me) => {
+    writeSessionUser(me.id);
     set((prev) => ({
       me,
       state: me.mustResetPassword ? 'mustResetPassword' : 'authenticated',
@@ -101,7 +119,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
         me.townshipId ??
         (prev.me?.id === me.id ? prev.actingTownshipId : null) ??
         readActing(me.id),
-    })),
+    }));
+  },
 
   setActingTownship: (townshipId) =>
     set((state) => {
@@ -130,6 +149,7 @@ export const sessionManager = new SessionManager({
   baseUrl: API_URL,
   store: tokenStore,
   onSessionEnd: () => {
+    writeSessionUser(null);
     useSessionStore.getState().setUnauthenticated('errors.UNAUTHORIZED');
     queryClient.clear();
   },
@@ -142,10 +162,16 @@ export const apiClient: ApiClient = createApiClient({
   // on the very next call rather than after a reload.
   actingTownshipId: () => useSessionStore.getState().actingTownshipId,
   onPasswordResetRequired: () => {
-    // Can arrive from *any* endpoint (§5.4). Flipping the state here is what force-navigates to
-    // the change-password screen no matter which query tripped the filter.
-    const store = useSessionStore.getState();
-    if (store.me) store.setMe({ ...store.me, mustResetPassword: true });
+    // Can arrive from *any* endpoint (§5.4), so it is what force-navigates to the change-password
+    // screen. But the 403 is evidence, not the verdict: it may be a late reply to a request sent
+    // before the password was changed, or one made with another account's token. Ask the server
+    // who this session is (`/auth/me` is allowed during a forced reset) and route on that.
+    void endpoints.auth
+      .me()
+      .then((me) => useSessionStore.getState().setMe(me))
+      .catch(() => {
+        /* the session-end path handles a dead session */
+      });
   },
 });
 
@@ -192,9 +218,33 @@ export async function bootstrapSession(): Promise<void> {
   }
 }
 
+/**
+ * Keep every tab on the browser's one session. `storage` events fire only in the *other* tabs,
+ * so this never loops: another tab signing out signs this one out; another tab signing in as
+ * someone else makes this one re-read who it is, rather than carry on showing the old account.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== SESSION_USER_KEY && event.key !== null) return;
+    const store = useSessionStore.getState();
+    const signedInAs = event.key === null ? null : event.newValue;
+    if (signedInAs === (store.me?.id ?? null)) return;
+
+    queryClient.clear();
+    sessionManager.forgetAccessToken();
+    if (signedInAs === null) {
+      store.setUnauthenticated();
+      return;
+    }
+    store.setLoading();
+    void bootstrapSession();
+  });
+}
+
 export async function signOut(): Promise<void> {
   const me = useSessionStore.getState().me;
   if (me && !me.townshipId) writeActing(me.id, null);
+  writeSessionUser(null);
   await runLogout({
     client: apiClient,
     queryClient,

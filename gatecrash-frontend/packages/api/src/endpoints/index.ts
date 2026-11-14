@@ -3,6 +3,7 @@ import { authEndpoints } from './auth';
 import { communityEndpoints } from './community';
 import { deviceEndpoints } from './devices';
 import { notificationEndpoints } from './notifications';
+export type { AudienceUser } from './notifications';
 import { passEndpoints } from './passes';
 import { platformEndpoints } from './platform';
 import { propertyEndpoints } from './property';

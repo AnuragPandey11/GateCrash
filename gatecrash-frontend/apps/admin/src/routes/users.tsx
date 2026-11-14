@@ -409,7 +409,7 @@ function RowMenu({
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="end"
-          className="z-50 min-w-48 rounded-md border border-border bg-surface p-1 shadow-lg"
+          className="z-50 max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] min-w-48 overflow-y-auto rounded-md border border-border bg-surface p-1 shadow-lg"
         >
           <DropdownMenu.Item
             onSelect={onEdit}

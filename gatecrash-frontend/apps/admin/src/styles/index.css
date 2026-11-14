@@ -24,7 +24,6 @@
 
   body {
     @apply bg-bg font-sans text-text antialiased;
-    font-feature-settings: 'ss01', 'cv11';
   }
 
   h1,
@@ -78,8 +77,8 @@
   /* Page titles, the big numbers, the brand. Display size only — never body copy. */
   .font-display {
     font-family: theme('fontFamily.display');
-    font-weight: 600;
-    letter-spacing: -0.015em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     font-variant-numeric: lining-nums;
   }
 
@@ -291,4 +290,73 @@
     color: hsl(var(--gc-text));
     border-radius: var(--gc-radius-sm);
   }
+}
+
+@layer components {
+  /*
+   * A list that scrolls inside a fixed height, with a scrollbar people can see and grab — the
+   * people picker, the bell, long slot lists. Hidden scrollbars made long lists look like they
+   * ended at the bottom of the box.
+   */
+  .scroll-panel {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--gc-text-muted) / 0.45) transparent;
+    overscroll-behavior: contain;
+  }
+  .scroll-panel::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scroll-panel::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: hsl(var(--gc-text-muted) / 0.4);
+  }
+
+  /* "This is the one you tapped": three soft pulses of the accent ring, then gone. */
+  .highlight-blink {
+    animation: gc-highlight-blink 1.1s ease-in-out 3;
+  }
+}
+
+@keyframes gc-highlight-blink {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--gc-accent) / 0);
+    background-color: hsl(var(--gc-surface));
+  }
+  50% {
+    box-shadow: 0 0 0 4px hsl(var(--gc-accent) / 0.55);
+    background-color: hsl(var(--gc-accent) / 0.12);
+  }
+}
+
+/*
+ * Radix Select and DropdownMenu hide the native scrollbar on their viewport. Every dropdown in
+ * the app shows it instead, so a long list visibly scrolls rather than appearing to stop at the
+ * edge of the screen.
+ */
+[data-radix-select-viewport],
+[data-radix-menu-content] {
+  scrollbar-width: thin !important;
+  scrollbar-color: hsl(var(--gc-text-muted) / 0.45) transparent;
+  -ms-overflow-style: auto !important;
+}
+[data-radix-select-viewport]::-webkit-scrollbar,
+[data-radix-menu-content]::-webkit-scrollbar {
+  display: block !important;
+  width: 8px;
+}
+[data-radix-select-viewport]::-webkit-scrollbar-thumb,
+[data-radix-menu-content]::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: hsl(var(--gc-text-muted) / 0.4);
+}
+
+/*
+ * While the theme flips, nothing animates: hundreds of colour transitions firing at once are what
+ * made the switch stutter. Applied for a couple of frames only, underneath the loading screen.
+ */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }

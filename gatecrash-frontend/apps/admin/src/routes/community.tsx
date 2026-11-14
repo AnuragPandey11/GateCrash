@@ -34,7 +34,9 @@ import { Input } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import { RichTextEditor } from '@/features/community/rich-text-editor';
 import { RichTextView } from '@/features/community/rich-text-view';
+import { cn } from '@/lib/cn';
 import { applyFieldErrors, errorMessage, toastError } from '@/lib/errors';
+import { useHighlight } from '@/lib/use-highlight';
 import { toast } from '@/lib/toast';
 
 const TITLE_MAX = 200;
@@ -59,6 +61,7 @@ export function CommunityRoute({ readOnly = false }: { readOnly?: boolean }) {
 
   const { data, isPending, isError, error, refetch } = useCommunityFeed(page);
   const remove = useDeletePost();
+  const highlighted = useHighlight(Boolean(data));
 
   // Pinned first in the UI. The server sorts by `publishedAt`, so the ordering the mobile feed
   // shows is reproduced here rather than assumed.
@@ -111,7 +114,7 @@ export function CommunityRoute({ readOnly = false }: { readOnly?: boolean }) {
 
       <div className="stagger space-y-4">
         {posts.map((post) => (
-          <Card key={post.id} className="lift">
+          <Card key={post.id} data-highlight-id={post.id} className={cn('lift', highlighted === post.id && 'highlight-blink')}>
             <CardContent className="space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
