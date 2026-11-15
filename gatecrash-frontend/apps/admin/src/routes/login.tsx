@@ -5,6 +5,7 @@ import { BellRing, Building2, Loader2, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -127,7 +128,10 @@ export function LoginRoute() {
         <p className="relative text-xs text-sidebar-muted/80">{t('login.heroFooter')}</p>
       </aside>
 
-      <div className="flex items-center justify-center p-6 sm:p-10">
+      <div className="relative flex items-center justify-center p-6 sm:p-10">
+        {/* Light / dark, before signing in too. Top-right of the form side, which is the only side
+            a phone shows. */}
+        <ThemeToggle className="absolute right-4 top-4 size-10 sm:right-6 sm:top-6" />
         <div className="w-full max-w-[25rem] space-y-8 animate-enter">
           <div className="space-y-3">
             <div className="flex items-center gap-3 lg:hidden">
