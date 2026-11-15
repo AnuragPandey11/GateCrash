@@ -74,14 +74,16 @@ export function useMe(options?: QueryOpts<Awaited<ReturnType<ReturnType<typeof u
 
 // ── Occupancy (§8.3) ────────────────────────────────────────────────────────────────────────
 
-export function useOccupancy() {
+export function useOccupancy(options?: { pollMs?: number }) {
   const api = useEndpoints();
   return useQuery({
     queryKey: qk.admin.inside,
     queryFn: ({ signal }) => api.adminVisits.inside(signal),
     // The socket pushes OCCUPANCY_CHANGED; this interval is the belt to that braces, so a
-    // silently dead socket still shows the truth within a minute (guardrail #7).
-    refetchInterval: 60_000,
+    // silently dead socket still shows the truth within a minute (guardrail #7). The gate
+    // console polls faster: guards get no occupancy socket, and another gate's check-outs
+    // should leave their list promptly.
+    refetchInterval: options?.pollMs ?? 60_000,
     staleTime: 0,
   });
 }
@@ -178,9 +180,9 @@ export function useCheckIn() {
   return useVisitTransition((id) => api.visits.checkIn(id));
 }
 
-export function useCheckOut() {
+export function useCheckOut(gateId?: GateId | null) {
   const api = useEndpoints();
-  return useVisitTransition((id) => api.visits.checkOut(id));
+  return useVisitTransition((id) => api.visits.checkOut(id, gateId));
 }
 
 // ── Notifications (§8.5) ────────────────────────────────────────────────────────────────────

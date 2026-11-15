@@ -7,9 +7,12 @@ spring:
 
 logging:
   level:
-    com.gatecrash: DEBUG
+    # Quiet by default: printing every SQL statement (the overstay sweep alone runs one a minute)
+    # flooded the terminal and cost noticeable CPU on smaller laptops. To see the SQL while
+    # debugging, set org.hibernate.SQL to DEBUG (and com.gatecrash to DEBUG for app detail).
+    com.gatecrash: INFO
     org.springframework.security: INFO
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: INFO
 
 app:
   bootstrap:

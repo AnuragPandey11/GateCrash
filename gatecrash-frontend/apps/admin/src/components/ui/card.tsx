@@ -1,18 +1,15 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/lib/cn';
 
 /**
  * The surface everything sits on: white (or midnight) paper with a hairline edge and a soft,
- * layered shadow — depth from light, not from heavy borders.
+ * layered shadow — depth from light, not from heavy borders. Forwards its ref so a screen can
+ * scroll a card into view.
  */
-export function Card({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return (
-    <div
-      className={cn('rounded-lg border border-border/80 bg-surface shadow-soft', className)}
-      {...props}
-    />
-  );
-}
+export const Card = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn('rounded-lg border border-border/80 bg-surface shadow-soft', className)} {...props} />
+));
+Card.displayName = 'Card';
 
 export function CardHeader({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (

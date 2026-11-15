@@ -62,8 +62,11 @@ export function visitEndpoints(client: ApiClient) {
       return parseVisit(await client.patch<unknown>(`visits/${id}/check-in`));
     },
 
-    async checkOut(id: VisitId): Promise<VisitResponse> {
-      return parseVisit(await client.patch<unknown>(`visits/${id}/check-out`));
+    /** `gateId`: the gate the guard is at, which may not be the one the visitor came in by. */
+    async checkOut(id: VisitId, gateId?: GateId | null): Promise<VisitResponse> {
+      return parseVisit(
+        await client.patch<unknown>(`visits/${id}/check-out`, gateId ? { json: { gateId } } : {}),
+      );
     },
 
     /** Unpaged by design — the caller's open approvals. A reconciliation path (§6.5). */

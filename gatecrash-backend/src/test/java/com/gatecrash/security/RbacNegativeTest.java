@@ -107,10 +107,13 @@ class RbacNegativeTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("a guard cannot export the visitor log")
-    void guardCannotExportVisits() throws Exception {
+    @DisplayName("a guard can read the visitor log (they log and admit these visitors), a resident cannot")
+    void guardReadsVisitLog() throws Exception {
         mockMvc.perform(get("/api/v1/admin/visits")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/visits")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(resident)))
                 .andExpect(status().isForbidden());
     }
 

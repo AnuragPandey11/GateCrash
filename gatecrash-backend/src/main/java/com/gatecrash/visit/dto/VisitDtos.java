@@ -75,6 +75,10 @@ public final class VisitDtos {
     public record ExtendStayRequest(@NotNull @Min(5) @Max(1440) Integer extendMinutes) {
     }
 
+    /** Check-out: the gate the guard is standing at, which may not be the one the visitor entered by. */
+    public record CheckOutRequest(UUID gateId) {
+    }
+
     /** The guard types the code the resident shows them. */
     public record CollectParcelRequest(@NotNull @Pattern(regexp = "^[0-9]{6}$") String code) {
     }
@@ -120,7 +124,10 @@ public final class VisitDtos {
             OffsetDateTime collectedAt,
             String collectionCode,
             /** Let in by one of the home's society rules rather than by a resident's tap. */
-            boolean autoApproved) {
+            boolean autoApproved,
+            /** The gate they left by, once checked out; {@code gateId} is the gate they entered at. */
+            UUID exitGateId,
+            String exitGateName) {
     }
 
     /** Admin "who is inside right now". */

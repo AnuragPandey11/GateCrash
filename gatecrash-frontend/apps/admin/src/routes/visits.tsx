@@ -50,6 +50,7 @@ import {
 import { useVisitFilters } from '@/features/visits/use-visit-filters';
 import { VisitDetailDrawer } from '@/features/visits/visit-detail-drawer';
 import { errorMessage } from '@/lib/errors';
+import { useSessionStore } from '@/lib/session';
 import { toast } from '@/lib/toast';
 import { useNomenclature } from '@/features/property/use-nomenclature';
 
@@ -65,6 +66,8 @@ export function VisitsRoute() {
   const navigate = useNavigate();
   const { visitId } = useParams();
   const endpoints = useEndpoints();
+  // Guards read the log but do not export it; bulk export stays with the society office.
+  const canExport = useSessionStore((s) => s.me?.role !== 'GUARD');
 
   const { filters, page, setFilter, setPage, clear, activeCount } = useVisitFilters();
   const { data, isPending, isError, error, refetch, isPlaceholderData } = useVisitSearch(filters, page);
@@ -121,6 +124,7 @@ export function VisitsRoute() {
         title={t('visits.title')}
         description={t('visits.subtitle')}
         actions={
+          canExport ? (
           <Button
             variant="secondary"
             onClick={() => void runExport()}
@@ -132,6 +136,7 @@ export function VisitsRoute() {
               ? t('visits.export.running', { done: exporting.done, total: exporting.total })
               : t('visits.export.action')}
           </Button>
+          ) : null
         }
       />
 
@@ -363,7 +368,11 @@ function VisitRow({ visit, onOpen }: { visit: VisitResponse; onOpen: () => void 
           {visit.meetSalesAgent ? <MeetSalesBadge /> : null}
         </div>
       </TD>
-      <TD className="whitespace-nowrap">{visit.gateName}</TD>
+      <TD className="whitespace-nowrap">
+        {visit.exitGateName && visit.exitGateName !== visit.gateName
+          ? `${visit.gateName} → ${visit.exitGateName}`
+          : visit.gateName}
+      </TD>
       <TD className="whitespace-nowrap">{visit.targetFlatNumber ?? visit.approverName ?? '—'}</TD>
       <TD>
         <VisitStatusBadge status={visit.status} />

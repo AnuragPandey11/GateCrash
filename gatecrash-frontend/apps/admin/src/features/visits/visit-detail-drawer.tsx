@@ -82,6 +82,9 @@ export function VisitDetailDrawer({
                     <span className="font-credential">{visit.vehicleNo ?? '—'}</span>
                   </Row>
                   <Row label={t('visits.detail.gate')}>{visit.gateName}</Row>
+                  {visit.exitGateName ? (
+                    <Row label={t('visits.detail.exitGate')}>{visit.exitGateName}</Row>
+                  ) : null}
                   <Row label={t('visits.detail.flat')}>{visit.targetFlatNumber ?? '—'}</Row>
                   <Row label={t('visits.detail.meetSalesAgent')}>
                     {visit.meetSalesAgent ? t('common.yes') : t('common.no')}

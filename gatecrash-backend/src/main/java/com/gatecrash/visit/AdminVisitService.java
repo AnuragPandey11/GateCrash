@@ -35,7 +35,11 @@ public class AdminVisitService {
     private final VisitorLogRepository visits;
     private final VisitMapper mapper;
 
-    @PreAuthorize("hasRole('ADMIN')")
+    /**
+     * Everyone inside the township right now, whichever gate they came in by. Guards read it too:
+     * it is their "Inside" list, so a visitor who entered at one gate can be checked out at another.
+     */
+    @PreAuthorize("hasAnyRole('ADMIN','GUARD')")
     @Transactional(readOnly = true)
     public OccupancyResponse inside() {
         List<VisitResponse> current = visits.findByTownship_IdAndStatusOrderByCheckedInAtDesc(
@@ -46,7 +50,11 @@ public class AdminVisitService {
         return new OccupancyResponse(current.size(), current);
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    /**
+     * The visitor log. Guards read it too: they log and admit these visitors, and the log is how a
+     * guard answers "did a delivery for A-101 come in this morning?". It stays township-anchored.
+     */
+    @PreAuthorize("hasAnyRole('ADMIN','GUARD')")
     @Transactional(readOnly = true)
     public PageResponse<VisitResponse> search(VisitStatus status, VisitorType visitorType,
                                               Boolean meetSalesAgent, UUID gateId, UUID flatId,

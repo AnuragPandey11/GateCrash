@@ -122,6 +122,9 @@ export function AppRoutes() {
   if (role === 'GUARD') {
     screens.push(
       { path: '/gate', element: <GateRoute /> },
+      // The visitor log, read-only for guards (no export): they log and admit these visitors.
+      { path: '/visits', element: <VisitsRoute /> },
+      { path: '/visits/:visitId', element: <VisitsRoute /> },
       { path: '/inbox', element: <InboxRoute /> },
       { path: '/community', element: <CommunityRoute readOnly /> },
     );

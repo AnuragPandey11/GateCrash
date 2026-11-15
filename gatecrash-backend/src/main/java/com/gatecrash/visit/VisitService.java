@@ -135,6 +135,7 @@ public class VisitService {
             transition(visit, VisitStatus.APPROVED);
             visit.setDecidedAt(OffsetDateTime.now());
             visit.setEntryRuleId(rule.getId());
+            enter(visit);
         }
 
         visits.save(visit);
@@ -152,13 +153,14 @@ public class VisitService {
         if (rule != null) {
             audit.record(AuditAction.VISIT_AUTO_APPROVED, "visitor_log", visitId,
                     AuditService.detail("entryRuleId", rule.getId()));
+            publishOccupancy(visit);
             UUID gateId = gate.getId();
             String visitorName = visit.getVisitorName();
             String ruleLabel = rule.getLabel();
             OffsetDateTime decidedAt = visit.getDecidedAt();
             afterCommit.execute(() -> {
                 // Other devices at this gate flip too; the household is told, not asked.
-                notifier.visitDecided(visitId, gateId, VisitStatus.APPROVED, visitorName, "Society rule", decidedAt);
+                notifier.visitDecided(visitId, gateId, VisitStatus.CHECKED_IN, visitorName, "Society rule", decidedAt);
                 userNotifier.notify(notifyUserIds, "VISIT", visitId, visitorName + " was let in",
                         "Allowed by your rule: " + ruleLabel);
             });
@@ -230,7 +232,11 @@ public class VisitService {
      * The approver's answer. Three outcomes:
      * <ul>
      *   <li>{@code APPROVED} -- optionally with how long the visitor will stay, if the guard did
-     *       not say. That duration is what the overstay alert later measures against.</li>
+     *       not say. That duration is what the overstay alert later measures against. The visitor
+     *       is standing at the gate waiting for exactly this answer, so approval <em>is</em> entry:
+     *       the visit goes straight on to CHECKED_IN and counts in live occupancy at once. (It used
+     *       to stop at APPROVED until the guard also tapped "Check in", a step guards missed, which
+     *       left admitted visitors out of the occupancy count.)</li>
      *   <li>{@code REJECTED}.</li>
      *   <li>{@code LEAVE_AT_GATE} -- deliveries to a household only. The courier stays out, security
      *       keeps the parcel, and the response carries a six-digit collection code exactly once.</li>
@@ -261,6 +267,9 @@ public class VisitService {
                 && visit.getExpectedDurationMinutes() == null) {
             visit.setExpectedDurationMinutes(expectedDurationMinutes);
         }
+        if (decision == Decision.APPROVED) {
+            enter(visit);
+        }
         String collectionCode = null;
         if (decision == Decision.LEAVE_AT_GATE) {
             collectionCode = issueCollectionCode(visit);
@@ -275,13 +284,20 @@ public class VisitService {
         };
         audit.record(action, "visitor_log", visitId, AuditService.detail("decidedBy", caller.getId()));
         log.info("Visit {} {} by user {}", visitId, target, caller.getId());
+        if (decision == Decision.APPROVED) {
+            audit.record(AuditAction.VISIT_CHECKED_IN, "visitor_log", visitId, AuditService.detail("onApproval", true));
+            publishOccupancy(visit);
+        }
 
         UUID gateId = visit.getGate().getId();
         String visitorName = visit.getVisitorName();
         String deciderName = decider.getFullName();
         OffsetDateTime decidedAt = visit.getDecidedAt();
+        // The gate hears the visit's actual state: CHECKED_IN for an approval, so the guard's card
+        // moves straight to "Inside".
+        VisitStatus reached = visit.getStatus();
         afterCommit.execute(() ->
-                notifier.visitDecided(visitId, gateId, target, visitorName, deciderName, decidedAt));
+                notifier.visitDecided(visitId, gateId, reached, visitorName, deciderName, decidedAt));
 
         return mapper.toResponse(visit, collectionCode);
     }
@@ -289,13 +305,10 @@ public class VisitService {
     @PreAuthorize("hasRole('GUARD')")
     @Transactional
     public VisitResponse checkIn(UUID visitId) {
+        // Approval now checks a visitor in by itself; this remains for visits that were approved
+        // before that change and are still waiting at APPROVED.
         VisitorLog visit = lockVisit(visitId);
-        transition(visit, VisitStatus.CHECKED_IN);
-        OffsetDateTime now = OffsetDateTime.now();
-        visit.setCheckedInAt(now);
-        if (visit.getExpectedDurationMinutes() != null && visit.getExpectedOutAt() == null) {
-            visit.setExpectedOutAt(now.plusMinutes(visit.getExpectedDurationMinutes()));
-        }
+        enter(visit);
         visits.save(visit);
 
         audit.record(AuditAction.VISIT_CHECKED_IN, "visitor_log", visitId, null);
@@ -306,9 +319,23 @@ public class VisitService {
     @PreAuthorize("hasRole('GUARD')")
     @Transactional
     public VisitResponse checkOut(UUID visitId) {
+        return checkOut(visitId, null);
+    }
+
+    /**
+     * The visitor leaves, through whichever gate the guard is standing at -- in a township with
+     * several gates, not necessarily the one they came in by. That gate is recorded as the exit
+     * gate. A client that does not say (an older app) is taken to mean the entry gate.
+     */
+    @PreAuthorize("hasRole('GUARD')")
+    @Transactional
+    public VisitResponse checkOut(UUID visitId, UUID exitGateId) {
         VisitorLog visit = lockVisit(visitId);
+        // Resolved within the caller's township before anything changes: a foreign gate is a 404.
+        Gate exitGate = exitGateId == null ? visit.getGate() : township.requireGate(exitGateId);
         transition(visit, VisitStatus.CHECKED_OUT);
         visit.setCheckedOutAt(OffsetDateTime.now());
+        visit.setExitGate(exitGate);
         visits.save(visit);
 
         audit.record(AuditAction.VISIT_CHECKED_OUT, "visitor_log", visitId, null);
@@ -407,10 +434,12 @@ public class VisitService {
                 AuditService.detail("extendMinutes", extendMinutes, "by", caller.getId()));
 
         UUID gateId = visit.getGate().getId();
+        UUID townshipId = visit.getTownshipId();
         String visitorName = visit.getVisitorName();
         OffsetDateTime expectedOut = visit.getExpectedOutAt();
         String byName = users.findById(caller.getId()).map(AppUser::getFullName).orElse(null);
-        afterCommit.execute(() -> notifier.stayExtended(visitId, gateId, visitorName, expectedOut, byName));
+        afterCommit.execute(() ->
+                notifier.stayExtended(townshipId, visitId, gateId, visitorName, expectedOut, byName));
         return mapper.toResponse(visit);
     }
 
@@ -534,6 +563,20 @@ public class VisitService {
                     && caller.getId().equals(visit.getApproverId());
         }
         return false;
+    }
+
+    /**
+     * The visitor walks in: APPROVED -> CHECKED_IN, stamped now, with the expected exit worked out
+     * from the duration if one is known. One place for it, whether the entry comes from an
+     * approval, a society rule, or (for older visits) the guard's Check in.
+     */
+    private void enter(VisitorLog visit) {
+        transition(visit, VisitStatus.CHECKED_IN);
+        OffsetDateTime now = OffsetDateTime.now();
+        visit.setCheckedInAt(now);
+        if (visit.getExpectedDurationMinutes() != null && visit.getExpectedOutAt() == null) {
+            visit.setExpectedOutAt(now.plusMinutes(visit.getExpectedDurationMinutes()));
+        }
     }
 
     private void transition(VisitorLog visit, VisitStatus target) {

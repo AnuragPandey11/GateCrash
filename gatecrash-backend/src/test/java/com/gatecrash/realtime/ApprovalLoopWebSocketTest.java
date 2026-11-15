@@ -9,6 +9,7 @@ import com.gatecrash.support.PostgresTestSupport;
 import com.gatecrash.support.TestDataFactory;
 import com.gatecrash.township.Gate;
 import com.gatecrash.user.AppUser;
+import com.gatecrash.visit.VisitNotifier;
 import com.gatecrash.visit.VisitService;
 import com.gatecrash.visit.VisitorType;
 import com.gatecrash.visit.dto.VisitDtos.CreateVisitRequest;
@@ -75,6 +76,9 @@ class ApprovalLoopWebSocketTest {
     private VisitService visitService;
 
     @Autowired
+    private VisitNotifier visitNotifier;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private WebSocketStompClient stompClient;
@@ -124,7 +128,26 @@ class ApprovalLoopWebSocketTest {
         JsonNode frame = received.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         assertThat(frame.get("type").asText()).isEqualTo(RealtimeEvents.VISIT_DECIDED);
         assertThat(frame.get("visitId").asText()).isEqualTo(visit.id().toString());
-        assertThat(frame.get("status").asText()).isEqualTo("APPROVED");
+        // Approval lets the visitor in, so the gate hears the state they actually reached.
+        assertThat(frame.get("status").asText()).isEqualTo("CHECKED_IN");
+    }
+
+    @Test
+    @DisplayName("an overstay alarm reaches every gate's guard, not only the gate the visitor came in by")
+    void overstayReachesEveryGate() throws Exception {
+        Gate serviceGate = data.gate("Service Gate");
+        StompSession session = connect(guard);
+        CompletableFuture<JsonNode> received = new CompletableFuture<>();
+        session.subscribe("/topic/gate/" + serviceGate.getId(), collector(received));
+
+        VisitResponse visit = asUser(guard, () -> visitService.createVisit(new CreateVisitRequest(
+                gate.getId(), VisitorType.GUEST, "Ravi Kumar", null, null, null, flat.getId(), false, null, null, 30)));
+        asUser(resident, () -> visitService.decide(visit.id(), Decision.APPROVED));
+        visitNotifier.overstay(visit.id());
+
+        JsonNode frame = received.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertThat(frame.get("type").asText()).isEqualTo(RealtimeEvents.OVERSTAY_ALERT);
+        assertThat(frame.get("visitId").asText()).isEqualTo(visit.id().toString());
     }
 
     @Test

@@ -123,6 +123,14 @@ public class VisitorLog {
     private UUID entryRuleId;
 
     /**
+     * Where the visitor left (V12). {@link #gate} is where they came in; in a township with several
+     * gates the two can differ, and both belong in the record.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "exit_gate_id")
+    private Gate exitGate;
+
+    /**
      * The routed decision-maker. For resident routing this is one nominated account on the flat --
      * any active resident of {@link #targetUnit} may decide, so ownership is checked against the flat,
      * not against this id.

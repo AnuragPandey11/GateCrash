@@ -78,6 +78,34 @@ export function App() {
           });
           break;
         }
+        case 'VISIT_DECIDED': {
+          // The guard at that gate: the resident's answer, in words. An approval has already
+          // marked the visitor inside, so the message is simply "let them in".
+          if (role !== 'GUARD') break;
+          if (frame.status === 'CHECKED_IN') {
+            play('doorbell');
+            toast.show({
+              title: t('portal.alerts.letIn', { name: frame.visitorName }),
+              description: t('portal.alerts.letInBy', { by: frame.decidedByName }),
+              tone: 'success',
+              durationMs: 8_000,
+            });
+          } else if (frame.status === 'REJECTED') {
+            toast.show({
+              title: t('portal.alerts.declined', { name: frame.visitorName }),
+              description: t('portal.alerts.declinedBy', { by: frame.decidedByName }),
+              tone: 'danger',
+              durationMs: 8_000,
+            });
+          } else if (frame.status === 'LEFT_AT_GATE') {
+            toast.show({
+              title: t('portal.alerts.keepParcel', { name: frame.visitorName }),
+              tone: 'info',
+              durationMs: 8_000,
+            });
+          }
+          break;
+        }
         case 'VISIT_EXTENDED': {
           toast.show({
             title: t('portal.alerts.extended', { name: frame.visitorName, by: frame.extendedByName ?? '' }),

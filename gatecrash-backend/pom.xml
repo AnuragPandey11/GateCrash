@@ -18,6 +18,13 @@
   <description>GateCrash Township ERP - Visitor Management + Targeted Notifications</description>
 
   <properties>
+    <!--
+      Memory for `mvn spring-boot:run` (local development only; the packaged jar is unaffected).
+      Without a cap the JVM may take a quarter of the machine's RAM. 512 MB is plenty for the API;
+      C1-only compilation starts faster and uses less memory. Override with
+      -Dspring-boot.run.jvmArguments="..." when needed.
+    -->
+    <spring-boot.run.jvmArguments>-Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1</spring-boot.run.jvmArguments>
     <java.version>21</java.version>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

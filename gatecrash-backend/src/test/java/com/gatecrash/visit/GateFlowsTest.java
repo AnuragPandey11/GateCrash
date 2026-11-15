@@ -205,14 +205,12 @@ class GateFlowsTest extends AbstractIntegrationTest {
     // ----- duration and overstay -------------------------------------------------------------
 
     @Test
-    @DisplayName("the resident's duration on approval sets the exit time at check-in")
+    @DisplayName("the resident's duration on approval sets the exit time, since approval lets them in")
     void residentSetsDurationOnApproval() throws Exception {
         UUID visitId = walkIn("GUEST", null);
         decide(visitId, Map.of("decision", "APPROVED", "expectedDurationMinutes", 45))
-                .andExpect(jsonPath("$.expectedDurationMinutes").value(45));
-        mockMvc.perform(patch("/api/v1/visits/" + visitId + "/check-in")
-                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
-                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CHECKED_IN"))
+                .andExpect(jsonPath("$.expectedDurationMinutes").value(45))
                 .andExpect(jsonPath("$.expectedOutAt").isNotEmpty());
     }
 
@@ -221,9 +219,6 @@ class GateFlowsTest extends AbstractIntegrationTest {
     void overstayThenExtend() throws Exception {
         UUID visitId = walkIn("GUEST", 30);
         decide(visitId, Map.of("decision", "APPROVED")).andExpect(status().isOk());
-        mockMvc.perform(patch("/api/v1/visits/" + visitId + "/check-in")
-                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
-                .andExpect(status().isOk());
 
         // Move the expected exit into the past, as if the 30 minutes had elapsed.
         jdbc.update("UPDATE visitor_log SET expected_out_at = now() - interval '5 minutes' WHERE id = ?", visitId);

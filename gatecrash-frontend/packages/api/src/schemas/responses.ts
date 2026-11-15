@@ -148,6 +148,9 @@ export const visitResponseSchema = z.object({
   collectionCode: nullish(z.string()),
   /** Let in by one of the home's society rules, not by a resident's tap. */
   autoApproved: z.boolean().default(false),
+  /** The gate they left by; `gateId` is where they came in. They differ in a multi-gate township. */
+  exitGateId: nullish(z.string().uuid()),
+  exitGateName: nullish(z.string()),
 });
 
 export interface VisitResponse {
@@ -184,6 +187,8 @@ export interface VisitResponse {
   collectedAt: string | null;
   collectionCode: string | null;
   autoApproved: boolean;
+  exitGateId: string | null;
+  exitGateName: string | null;
 }
 
 export const redeemPassResponseSchema = z.object({

@@ -73,7 +73,7 @@ class EntryRulesTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.status").value("APPROVED"));
 
         walkIn(flatA, "DELIVERY", "Ravi", "Amazon order")
-                .andExpect(jsonPath("$.status").value("APPROVED"))
+                .andExpect(jsonPath("$.status").value("CHECKED_IN"))
                 .andExpect(jsonPath("$.autoApproved").value(true));
         walkIn(flatA, "DELIVERY", "Sunil", "Flipkart")
                 .andExpect(jsonPath("$.status").value("PENDING"));

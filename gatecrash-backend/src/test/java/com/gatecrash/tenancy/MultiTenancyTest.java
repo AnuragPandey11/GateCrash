@@ -324,11 +324,8 @@ class MultiTenancyTest extends AbstractIntegrationTest {
     @DisplayName("the occupancy report counts only the caller's township")
     void occupancyIsScoped() throws Exception {
         UUID betaVisit = logWalkIn(betaGuard, betaGate, betaFlat);
+        // Approval lets the visitor in, so they are inside from this point.
         decide(betaResident, betaVisit);
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .patch("/api/v1/visits/" + betaVisit + "/check-in")
-                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(betaGuard)))
-                .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/admin/inside")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(betaAdmin)))

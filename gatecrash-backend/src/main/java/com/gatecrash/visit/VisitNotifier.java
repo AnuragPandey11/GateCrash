@@ -2,6 +2,7 @@ package com.gatecrash.visit;
 
 import com.gatecrash.user.UserRole;
 import com.gatecrash.user.AppUserRepository;
+import com.gatecrash.township.GateRepository;
 import com.gatecrash.user.AppUser;
 import com.gatecrash.device.DeviceService;
 import com.gatecrash.push.FcmService;
@@ -46,6 +47,7 @@ public class VisitNotifier {
     private final FcmService fcm;
     private final RealtimeService realtime;
     private final AppUserRepository users;
+    private final GateRepository gates;
 
     /** Step 4 of the approval loop: tell the routed approver(s) that someone is at the gate. */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
@@ -129,11 +131,19 @@ public class VisitNotifier {
                 visitId, status, visitorName, gateName, inside, OffsetDateTime.now()));
     }
 
-    /** The host extended a stay: clear the alarm on the gate console and show the new exit time. */
-    public void stayExtended(UUID visitId, UUID gateId, String visitorName, OffsetDateTime expectedOutAt,
-                             String extendedByName) {
-        realtime.toGate(gateId, RealtimeEvents.VisitExtendedEvent.of(
+    /**
+     * The host extended a stay: clear the alarm and show the new exit time -- at every gate, since
+     * the visitor may leave by any of them.
+     */
+    public void stayExtended(UUID townshipId, UUID visitId, UUID gateId, String visitorName,
+                             OffsetDateTime expectedOutAt, String extendedByName) {
+        toAllGates(townshipId, RealtimeEvents.VisitExtendedEvent.of(
                 visitId, gateId, visitorName, expectedOutAt, extendedByName));
+    }
+
+    /** One frame to every gate of the township. Gates are few, and each guard watches their own. */
+    private void toAllGates(UUID townshipId, Object event) {
+        gates.findByTownship_IdOrderByNameAsc(townshipId).forEach(g -> realtime.toGate(g.getId(), event));
     }
 
     /**
@@ -151,7 +161,8 @@ public class VisitNotifier {
         String flatNumber = visit.getTargetUnit() == null ? null : visit.getTargetUnit().getCode();
         RealtimeEvents.OverstayAlertEvent event = RealtimeEvents.OverstayAlertEvent.of(
                 visitId, gateId, visit.getVisitorName(), flatNumber, visit.getExpectedOutAt());
-        realtime.toGate(gateId, event);
+        // Every gate's guard hears it: the visitor may be heading for any exit.
+        toAllGates(visit.getTownshipId(), event);
 
         List<UUID> hosts = visit.getTargetUnit() != null
                 ? users.findByUnit_IdAndRoleAndActiveTrue(visit.getTargetUnit().getId(), UserRole.RESIDENT)

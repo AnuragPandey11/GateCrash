@@ -60,19 +60,25 @@ class VisitFsmTest extends AbstractIntegrationTest {
     // ----- happy path -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("the full loop: log, approve, check in, check out")
+    @DisplayName("the full loop: log, approve (which lets them in and counts them inside), check out")
     void fullApprovalLoop() throws Exception {
         UUID visitId = logWalkIn(flatA.getId());
         assertStatus(visitId, VisitStatus.PENDING);
 
+        // The visitor is at the gate waiting for this answer: approval is entry.
         decide(residentA, visitId, "APPROVED").andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("APPROVED"))
-                .andExpect(jsonPath("$.decidedAt").isNotEmpty());
+                .andExpect(jsonPath("$.status").value("CHECKED_IN"))
+                .andExpect(jsonPath("$.decidedAt").isNotEmpty())
+                .andExpect(jsonPath("$.checkedInAt").isNotEmpty());
 
-        mockMvc.perform(patch("/api/v1/visits/" + visitId + "/check-in")
-                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
+        // Regression: an approved walk-in used to stay out of live occupancy until the guard
+        // also tapped Check in.
+        AppUser admin = data.admin();
+        mockMvc.perform(get("/api/v1/admin/inside")
+                        .header(HttpHeaders.AUTHORIZATION, auth.bearer(admin)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CHECKED_IN"));
+                .andExpect(jsonPath("$.insideCount").value(1))
+                .andExpect(jsonPath("$.visits[0].id").value(visitId.toString()));
 
         mockMvc.perform(patch("/api/v1/visits/" + visitId + "/check-out")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))
@@ -113,10 +119,9 @@ class VisitFsmTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("a visit cannot be checked out before it is checked in")
+    @DisplayName("a visit still waiting for a decision cannot be checked out")
     void checkOutBeforeCheckInIsConflict() throws Exception {
         UUID visitId = logWalkIn(flatA.getId());
-        decide(residentA, visitId, "APPROVED").andExpect(status().isOk());
 
         mockMvc.perform(patch("/api/v1/visits/" + visitId + "/check-out")
                         .header(HttpHeaders.AUTHORIZATION, auth.bearer(guard)))

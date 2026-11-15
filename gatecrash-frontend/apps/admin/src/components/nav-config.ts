@@ -127,6 +127,7 @@ export function navFor(input: {
           key: 'nav.sectionGate',
           items: [
             { to: '/gate', key: 'nav.gate', icon: DoorOpen },
+            { to: '/visits', key: 'nav.visits', icon: ScrollText },
             { to: '/inbox', key: 'nav.inbox', icon: Bell },
             { to: '/community', key: 'nav.community', icon: MessageSquare },
           ],

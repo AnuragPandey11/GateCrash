@@ -6,6 +6,7 @@ import {
   useGateFeed,
   useGates,
   useMovesToday,
+  useOccupancy,
   usePropertyNodes,
   useSalesOnDuty,
   type VisitResponse,
@@ -30,7 +31,7 @@ import {
   Truck,
   UserPlus,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/app-shell';
 import { MeetSalesBadge, VisitStatusBadge, VisitorTypeBadge } from '@/components/status-badge';
@@ -86,6 +87,9 @@ export function GateRoute() {
   const [scanning, setScanning] = useState(false);
   const [staffOpen, setStaffOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('new');
+  // Bumped by the Walk-in button. The form is often already the open tab, so switching to it
+  // alone changed nothing on screen; the bump tells the form to scroll into view and take focus.
+  const [walkInRequest, setWalkInRequest] = useState(0);
 
   // A remembered gate that no longer exists (deleted, or another township's) is forgotten.
   useEffect(() => {
@@ -95,9 +99,12 @@ export function GateRoute() {
   const feed = useGateFeed(gateId, 200);
   const all = feed.data ?? [];
   const atGate = all.filter((v) => ['PENDING', 'APPROVED', 'LEFT_AT_GATE'].includes(v.status));
-  const inside = all
-    .filter((v) => v.status === 'CHECKED_IN')
-    .sort((a, b) => Number(b.overstaying) - Number(a.overstaying));
+  // Everyone inside the township, whichever gate they came in by: a visitor may leave through
+  // this gate after entering at another, and this guard must be able to check them out.
+  const township = useOccupancy({ pollMs: 20_000 });
+  const inside = [...(township.data?.visits ?? [])].sort(
+    (a, b) => Number(b.overstaying) - Number(a.overstaying),
+  );
   const overstaying = inside.filter((v) => v.overstaying).length;
   const moves = useMovesToday(Boolean(gateId));
 
@@ -141,7 +148,10 @@ export function GateRoute() {
                 size="lg"
                 variant="secondary"
                 className="h-14 text-base"
-                onClick={() => setTab('new')}
+                onClick={() => {
+                  setTab('new');
+                  setWalkInRequest((n) => n + 1);
+                }}
               >
                 <UserPlus aria-hidden />
                 {t('portal.gate.walkIn')}
@@ -195,9 +205,13 @@ export function GateRoute() {
             </button>
           ) : null}
 
-          {tab === 'new' ? <WalkInForm gateId={gateId} onLogged={() => setTab('gate')} /> : null}
-          {tab === 'gate' ? <VisitList visits={atGate} empty={t('portal.gate.emptyGate')} /> : null}
-          {tab === 'inside' ? <VisitList visits={inside} empty={t('portal.gate.emptyInside')} /> : null}
+          {tab === 'new' ? (
+            <WalkInForm gateId={gateId} focusRequest={walkInRequest} onLogged={() => setTab('gate')} />
+          ) : null}
+          {tab === 'gate' ? <VisitList visits={atGate} gateId={gateId} empty={t('portal.gate.emptyGate')} /> : null}
+          {tab === 'inside' ? (
+            <VisitList visits={inside} gateId={gateId} empty={t('portal.gate.emptyInside')} />
+          ) : null}
           {tab === 'staff' ? <StaffInsideList gateId={gateId} /> : null}
           {tab === 'moves' ? <MovesToday /> : null}
 
@@ -216,8 +230,31 @@ export function GateRoute() {
  * when "Meet Sales Agent" is ticked). Optional at the gate: phone, vehicle, purpose, and how long
  * they will stay — the resident can set the duration when approving instead.
  */
-function WalkInForm({ gateId, onLogged }: { gateId: GateId; onLogged: () => void }) {
+function WalkInForm({
+  gateId,
+  focusRequest,
+  onLogged,
+}: {
+  gateId: GateId;
+  /** Changes each time the Walk-in button is pressed. */
+  focusRequest: number;
+  onLogged: () => void;
+}) {
   const { t } = useTranslation();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [flash, setFlash] = useState(false);
+
+  // Walk-in pressed: bring the form into view, put the cursor in the name box, and flash the card
+  // so the guard sees where it is. Skipped on first render (0), so opening the console does not jump.
+  useEffect(() => {
+    if (focusRequest === 0) return undefined;
+    cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    nameRef.current?.focus({ preventScroll: true });
+    setFlash(true);
+    const timer = window.setTimeout(() => setFlash(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [focusRequest]);
   const nom = useNomenclature();
   const units = usePropertyNodes({ depth: nom.unitLevel?.depth ?? null }, { enabled: nom.unitLevel != null });
   const agents = useSalesOnDuty();
@@ -279,7 +316,7 @@ function WalkInForm({ gateId, onLogged }: { gateId: GateId; onLogged: () => void
   };
 
   return (
-    <Card>
+    <Card ref={cardRef} className={cn('scroll-mt-20', flash && 'highlight-blink')}>
       <CardHeader>
         <CardTitle>{t('portal.gate.newVisitor')}</CardTitle>
       </CardHeader>
@@ -305,7 +342,14 @@ function WalkInForm({ gateId, onLogged }: { gateId: GateId; onLogged: () => void
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('portal.visitor.name')} required>
               {(props) => (
-                <Input {...props} value={name} onChange={(e) => setName(e.target.value)} className="h-11" autoComplete="off" />
+                <Input
+                  {...props}
+                  ref={nameRef}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-11"
+                  autoComplete="off"
+                />
               )}
             </Field>
             <Field
@@ -421,7 +465,7 @@ function WalkInForm({ gateId, onLogged }: { gateId: GateId; onLogged: () => void
 
 // ── Lists ────────────────────────────────────────────────────────────────────────────────────────
 
-function VisitList({ visits, empty }: { visits: VisitResponse[]; empty: string }) {
+function VisitList({ visits, gateId, empty }: { visits: VisitResponse[]; gateId: GateId; empty: string }) {
   const [collecting, setCollecting] = useState<VisitResponse | null>(null);
   if (visits.length === 0) {
     return (
@@ -434,7 +478,7 @@ function VisitList({ visits, empty }: { visits: VisitResponse[]; empty: string }
     <>
       <div className="stagger grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {visits.map((visit) => (
-          <GateVisitCard key={visit.id} visit={visit} onCollect={() => setCollecting(visit)} />
+          <GateVisitCard key={visit.id} visit={visit} gateId={gateId} onCollect={() => setCollecting(visit)} />
         ))}
       </div>
       {collecting ? <CollectDialog visit={collecting} onClose={() => setCollecting(null)} /> : null}
@@ -442,10 +486,20 @@ function VisitList({ visits, empty }: { visits: VisitResponse[]; empty: string }
   );
 }
 
-function GateVisitCard({ visit, onCollect }: { visit: VisitResponse; onCollect: () => void }) {
+function GateVisitCard({
+  visit,
+  gateId,
+  onCollect,
+}: {
+  visit: VisitResponse;
+  /** The gate this console is at. Check-out records it as the exit gate. */
+  gateId: GateId;
+  onCollect: () => void;
+}) {
   const { t } = useTranslation();
   const checkIn = useCheckIn();
-  const checkOut = useCheckOut();
+  const checkOut = useCheckOut(gateId);
+  const enteredElsewhere = visit.gateId !== gateId;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
@@ -478,6 +532,9 @@ function GateVisitCard({ visit, onCollect }: { visit: VisitResponse; onCollect: 
           <VisitorTypeBadge type={visit.visitorType} />
           {visit.meetSalesAgent ? <MeetSalesBadge /> : null}
           {visit.autoApproved ? <Badge tone="info">{t('portal.rules.autoBadge')}</Badge> : null}
+          {enteredElsewhere ? (
+            <Badge tone="muted">{t('portal.gate.cameInAt', { gate: visit.gateName })}</Badge>
+          ) : null}
           {visit.overstaying ? (
             <Badge tone="danger" icon={<AlarmClock className="size-3" aria-hidden />}>
               {t('portal.gate.overstaying')}

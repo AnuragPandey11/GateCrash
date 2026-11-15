@@ -2,6 +2,7 @@ package com.gatecrash.visit;
 
 import com.gatecrash.config.AppProperties;
 import com.gatecrash.common.PageResponse;
+import com.gatecrash.visit.dto.VisitDtos.CheckOutRequest;
 import com.gatecrash.visit.dto.VisitDtos.CollectParcelRequest;
 import com.gatecrash.visit.dto.VisitDtos.CollectionCodeResponse;
 import com.gatecrash.visit.dto.VisitDtos.CreateVisitRequest;
@@ -66,8 +67,9 @@ public class VisitController {
 
     @PatchMapping("/{id}/check-out")
     @Operation(summary = "Guard records exit")
-    public VisitResponse checkOut(@PathVariable UUID id) {
-        return visits.checkOut(id);
+    public VisitResponse checkOut(@PathVariable UUID id,
+                                  @RequestBody(required = false) CheckOutRequest request) {
+        return visits.checkOut(id, request == null ? null : request.gateId());
     }
 
     @GetMapping("/mine")

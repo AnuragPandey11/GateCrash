@@ -45,6 +45,8 @@ public class VisitMapper {
                 overstaying,
                 visit.getCollectedAt(),
                 collectionCode,
-                visit.getEntryRuleId() != null);
+                visit.getEntryRuleId() != null,
+                visit.getExitGate() == null ? null : visit.getExitGate().getId(),
+                visit.getExitGate() == null ? null : visit.getExitGate().getName());
     }
 }
