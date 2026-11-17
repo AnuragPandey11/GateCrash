@@ -104,7 +104,7 @@ export function VisitDetailDrawer({
                 </dl>
 
                 <section className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  <h4 className="text-xs font-semibold text-text-muted">
                     {t('visits.detail.timeline')}
                   </h4>
                   <ol className="space-y-3 border-l border-border pl-4">
@@ -132,7 +132,7 @@ export function VisitDetailDrawer({
                 </section>
 
                 <section className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  <h4 className="text-xs font-semibold text-text-muted">
                     {t('visits.detail.photo')}
                   </h4>
                   {visit.photoUrl ? (

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { signOut, useSessionStore } from '@/lib/session';
-import { BrandTile, OakshadeMark } from './brand';
+import { BrandTile } from './brand';
 import { ConnectionPill } from './connection-pill';
 import { navFor, type NavItem, type NavSectionDef } from './nav-config';
 import { NotificationBell } from './notification-bell';
@@ -224,10 +224,7 @@ function Brand({ collapsed }: { collapsed: boolean }) {
           {t('common.appName')}
         </span>
         {/* The endorsement: GateCrash is an Oakshade AI product. */}
-        <span className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap text-[0.5625rem] font-semibold uppercase tracking-[0.22em] text-text-muted">
-          <OakshadeMark className="size-3" />
-          {t('brand.byline')}
-        </span>
+        <span className="mt-1 block whitespace-nowrap text-xs text-text-muted">{t('brand.byline')}</span>
       </span>
     </div>
   );
@@ -253,7 +250,7 @@ function NavSection({
         // The section word does not fit a rail; a hairline keeps the grouping visible.
         <div className="mx-2 mb-2 h-px bg-border" aria-hidden />
       ) : (
-        <p className="whitespace-nowrap px-3 pb-2 text-[0.625rem] font-semibold uppercase tracking-[0.25em] text-text-muted/80">
+        <p className="whitespace-nowrap px-3 pb-1.5 text-xs font-medium text-text-muted">
           {label}
         </p>
       )}
@@ -267,12 +264,12 @@ function NavSection({
           <NavLink
             to={to}
             className={cn(
-              'flex items-center gap-3 rounded-full text-sm font-medium transition-[background-color,color,box-shadow] duration-300 ease-out-expo',
+              'flex items-center gap-3 rounded-full text-sm font-medium transition-colors',
               large ? 'min-h-11 py-2.5' : 'py-2',
               collapsed ? 'mx-auto size-10 justify-center px-0' : 'px-3.5',
               // The active screen is the one ink pill in the sidebar.
               isActive
-                ? 'bg-primary text-primary-fg shadow-[var(--gc-shadow-cta)]'
+                ? 'bg-primary text-primary-fg'
                 : 'text-text-muted hover:bg-surface-raised hover:text-text',
             )}
           >
@@ -382,28 +379,19 @@ export function PageHeader({
   title: string;
   description?: string;
   actions?: React.ReactNode;
-  /** Small wide-tracked caps above the title — the section a screen belongs to. */
+  /** A short muted line above the title — the section a screen belongs to. */
   eyebrow?: string;
 }) {
-  // Oakshade's section opening: wide-tracked grey caps, then a bold, tight title that rises out
-  // of its own mask, then a hairline that draws itself across.
   return (
-    <div className="mb-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-2.5">
-          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-          <h1 className="font-display text-[1.875rem] leading-[1.1] text-text md:text-[2.5rem]">
-            <span className="reveal-line">
-              <span>{title}</span>
-            </span>
-          </h1>
-          {description ? (
-            <p className="max-w-2xl text-[0.9375rem] leading-relaxed text-text-muted">{description}</p>
-          ) : null}
-        </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+      <div className="space-y-1">
+        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+        <h1 className="font-display text-[1.75rem] leading-tight text-text md:text-[2rem]">{title}</h1>
+        {description ? (
+          <p className="max-w-2xl pt-1 text-[0.9375rem] leading-relaxed text-text-muted">{description}</p>
+        ) : null}
       </div>
-      <div className="rule-draw mt-6" aria-hidden />
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

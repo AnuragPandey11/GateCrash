@@ -282,7 +282,7 @@ function MyBookings() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-text-muted">{t('portal.amenities.myBookings')}</h2>
+      <h2 className="text-sm font-semibold text-text">{t('portal.amenities.myBookings')}</h2>
       {bookings.isPending ? <LoadingState /> : null}
       {bookings.data && bookings.data.length === 0 ? (
         <Card>
@@ -366,7 +366,7 @@ function OfficeAmenities() {
     <div className="space-y-8">
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-text-muted">{t('portal.amenities.list')}</h2>
+          <h2 className="text-sm font-semibold text-text">{t('portal.amenities.list')}</h2>
           <Button size="sm" onClick={() => setEditing('new')}>
             <Plus aria-hidden />
             {t('portal.amenities.add')}
@@ -401,7 +401,7 @@ function OfficeAmenities() {
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-text-muted">{t('portal.amenities.dayBookings')}</h2>
+          <h2 className="text-sm font-semibold text-text">{t('portal.amenities.dayBookings')}</h2>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 w-44" aria-label={t('portal.amenities.dayBookings')} />
         </div>
         {day.isPending ? <LoadingState /> : null}

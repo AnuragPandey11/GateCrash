@@ -26,38 +26,15 @@
     @apply bg-bg font-sans text-text antialiased;
   }
 
-  /*
-   * Film grain over everything, exactly as oakshade-ai.com lays it: fractal noise on an oversized
-   * fixed layer, jittered six times a second. It is transform-only, so it stays on the
-   * compositor; it never takes a click; and it stops for anyone who has asked for less motion.
-   */
-  body::after {
-    content: '';
-    position: fixed;
-    inset: -50%;
-    z-index: 100;
-    pointer-events: none;
-    opacity: var(--gc-grain-opacity);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    animation: gc-grain 1s steps(6) infinite;
-  }
-
-  @media print {
-    body::after {
-      display: none;
-    }
-  }
-
   h1,
   h2,
   h3 {
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
 
-  /* Ink selection — Oakshade's one-colour brand, applied even to highlighted text. */
   ::selection {
-    background: hsl(var(--gc-text));
-    color: hsl(var(--gc-bg));
+    background: hsl(var(--gc-text) / 0.16);
+    color: inherit;
   }
 
   :focus-visible {
@@ -93,134 +70,28 @@
       animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
     }
-    body::after {
-      animation: none !important;
-    }
   }
-}
-
-@keyframes gc-grain {
-  0% { transform: translate(0); }
-  20% { transform: translate(-4%, 3%); }
-  40% { transform: translate(3%, -5%); }
-  60% { transform: translate(-6%, -2%); }
-  80% { transform: translate(5%, 4%); }
-  100% { transform: translate(0); }
 }
 
 @layer components {
-  /* Page titles, the big numbers, the brand. Display size only — never body copy.
-     Oakshade's headline setting: bold and tight. */
+  /* Page titles and the big numbers. Display size only — never body copy. */
   .font-display {
     font-family: theme('fontFamily.display');
-    font-weight: 700;
-    letter-spacing: -0.025em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     font-variant-numeric: lining-nums;
   }
 
-  /* The one emphasised phrase in a headline: Playfair Display italic, a touch lighter than the
-     sans around it so it reads as a voice, not a shout. Never a whole heading. */
-  .serif-accent {
-    font-family: theme('fontFamily.serif');
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-  }
-
-  /* The wide-tracked caps above a title: "PLATFORM", "OVERVIEW". Grey, not loud — Oakshade's
-     `text-xs uppercase tracking-[0.25em] text-neutral-400`. */
+  /* The small line above a page title — which part of the app this is. Plain words, not a
+     shouted label. */
   .eyebrow {
-    @apply text-[0.6875rem] font-semibold uppercase text-text-muted;
-    letter-spacing: 0.25em;
+    @apply text-sm font-medium text-text-muted;
   }
 
-  /* A hairline that fades out at both ends. */
+  /* A plain hairline. */
   .accent-rule {
     height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      hsl(var(--gc-border)) 20%,
-      hsl(var(--gc-border)) 80%,
-      transparent
-    );
-  }
-
-  /* A hairline that draws itself in from the left — under page headers. */
-  .rule-draw {
-    height: 1px;
     background: hsl(var(--gc-border));
-    transform-origin: left;
-    animation: draw-x 1100ms cubic-bezier(0.76, 0, 0.24, 1) 120ms both;
-  }
-
-  /* A line of type rising out of its own mask. Put the text in an inner `.reveal-line > span`. */
-  .reveal-line {
-    display: block;
-    overflow: hidden;
-    /* Room for descenders and the italic overhang, which the mask would otherwise clip. */
-    padding-bottom: 0.12em;
-    margin-bottom: -0.12em;
-  }
-  .reveal-line > span {
-    display: block;
-    animation: reveal-up 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-
-  /* Oakshade's link hover: an underline that sweeps in from the left and out to the right. */
-  .link-underline {
-    background-image: linear-gradient(currentColor, currentColor);
-    background-repeat: no-repeat;
-    background-size: 0% 1px;
-    background-position: 100% 100%;
-    padding-bottom: 2px;
-    transition: background-size 450ms cubic-bezier(0.76, 0, 0.24, 1);
-  }
-  .link-underline:hover,
-  .link-underline:focus-visible,
-  .group:hover .link-underline {
-    background-size: 100% 1px;
-    background-position: 0% 100%;
-  }
-
-  /* Edges of a marquee fade out instead of being cut. */
-  .marquee-mask {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
-    mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
-  }
-
-  /* The giant cropped wordmark at the foot of an ink panel, fading into it. */
-  .wordmark-giant {
-    @apply pointer-events-none select-none whitespace-nowrap font-bold;
-    font-family: theme('fontFamily.display');
-    line-height: 0.85;
-    letter-spacing: -0.05em;
-    background-image: linear-gradient(to bottom, hsl(0 0% 26%), hsl(var(--gc-sidebar)));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* Oakshade's icon tile: ink on cream, flipping to cream on ink when its card is hovered. */
-  .icon-tile {
-    @apply flex shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent;
-    transition:
-      background-color 300ms ease,
-      color 300ms ease;
-  }
-  .group:hover .icon-tile {
-    @apply bg-primary text-primary-fg;
-  }
-
-  /* Forward-pointing icons inside a button slide on hover — Oakshade's arrow nudge. */
-  .gc-btn :is(.lucide-arrow-right, .lucide-chevron-right, .lucide-arrow-up-right) {
-    transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .gc-btn:hover :is(.lucide-arrow-right, .lucide-chevron-right) {
-    transform: translateX(3px);
-  }
-  .gc-btn:hover .lucide-arrow-up-right {
-    transform: translate(2px, -2px);
   }
 
   /* Loading placeholder with a slow sheen. */
@@ -236,57 +107,31 @@
     animation: shimmer 1.8s linear infinite;
   }
 
-  /* Children rise in one after another (Oakshade's `y: 16` fade-up). Grids and lists of cards. */
+  /* Lists of cards fade in quickly, nearly together — enough to show the content is new, not
+     a performance. */
   .stagger > * {
-    animation: enter 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: fade-in 220ms ease-out both;
   }
-  .stagger > *:nth-child(1) { animation-delay: 0ms; }
-  .stagger > *:nth-child(2) { animation-delay: 60ms; }
-  .stagger > *:nth-child(3) { animation-delay: 120ms; }
-  .stagger > *:nth-child(4) { animation-delay: 180ms; }
-  .stagger > *:nth-child(5) { animation-delay: 240ms; }
-  .stagger > *:nth-child(6) { animation-delay: 300ms; }
-  .stagger > *:nth-child(7) { animation-delay: 340ms; }
-  .stagger > *:nth-child(8) { animation-delay: 380ms; }
-  .stagger > *:nth-child(n + 9) { animation-delay: 420ms; }
+  .stagger > *:nth-child(2) { animation-delay: 20ms; }
+  .stagger > *:nth-child(3) { animation-delay: 40ms; }
+  .stagger > *:nth-child(4) { animation-delay: 60ms; }
+  .stagger > *:nth-child(n + 5) { animation-delay: 80ms; }
 
-  /* Hover lift for interactive cards — Oakshade's `hover:-translate-y-1 hover:shadow-xl`. */
+  /* Interactive cards answer the pointer with a darker edge and a soft shadow; they stay put. */
   .lift {
     transition:
-      transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 500ms cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 300ms ease;
+      box-shadow 200ms ease,
+      border-color 200ms ease;
   }
   .lift:hover {
-    transform: translateY(-4px);
     box-shadow: var(--gc-shadow-raised);
-    border-color: hsl(var(--gc-text) / 0.18);
+    border-color: hsl(var(--gc-text) / 0.2);
   }
 
-  /*
-   * The ink panel — Oakshade's #0a0a0a section: a soft white light falling from the top edge,
-   * and a fine grid that fades out towards the corners. Behind sign-in and the full-screen
-   * account pages.
-   */
+  /* The ink panel — Oakshade's plain #0a0a0a section, behind sign-in and the full-screen
+     account pages. */
   .ink-panel {
-    position: relative;
-    isolation: isolate;
-    background:
-      radial-gradient(circle at 50% 0%, hsl(0 0% 100% / 0.09) 0%, hsl(0 0% 100% / 0.02) 55%, transparent 100%),
-      hsl(var(--gc-sidebar));
-  }
-  .ink-panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-image:
-      linear-gradient(hsl(var(--gc-sidebar-fg) / 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--gc-sidebar-fg) / 0.045) 1px, transparent 1px);
-    background-size: 56px 56px;
-    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, #000 30%, transparent 100%);
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, #000 30%, transparent 100%);
+    background-color: hsl(var(--gc-sidebar));
   }
 }
 

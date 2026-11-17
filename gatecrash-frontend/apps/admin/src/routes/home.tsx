@@ -137,11 +137,11 @@ export function HomeRoute({ salesMode = false }: { salesMode?: boolean }) {
 
 function SectionTitle({ icon: Icon, title, count }: { icon: typeof Clock; title: string; count?: number }) {
   return (
-    <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-text-muted">
-      <Icon className="size-4 text-accent" aria-hidden />
+    <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
+      <Icon className="size-4 text-text-muted" aria-hidden />
       {title}
       {count !== undefined && count > 0 ? (
-        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[0.6875rem] text-accent">{count}</span>
+        <span className="rounded-full bg-surface-raised px-2 py-0.5 text-xs font-medium text-text-muted">{count}</span>
       ) : null}
     </h2>
   );

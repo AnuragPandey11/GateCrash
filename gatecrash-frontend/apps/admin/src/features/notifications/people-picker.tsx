@@ -113,7 +113,7 @@ export function PeoplePicker({ rule, onChange }: { rule: AudienceRule; onChange:
                   aria-controls={listId}
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left"
                 >
-                  <span className="text-xs font-semibold uppercase tracking-wide text-text">{label}</span>
+                  <span className="text-xs font-semibold text-text">{label}</span>
                   <span className="text-xs text-text-muted">
                     {picked}/{members.length}
                   </span>

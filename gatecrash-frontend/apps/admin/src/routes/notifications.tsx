@@ -159,7 +159,7 @@ function Composer() {
           <CardContent className="space-y-4">
             {formIsEmpty ? (
               <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                <p className="text-xs font-medium text-text-muted">
                   {t('notifications.templates.heading')}
                 </p>
                 <div className="flex flex-wrap gap-2">

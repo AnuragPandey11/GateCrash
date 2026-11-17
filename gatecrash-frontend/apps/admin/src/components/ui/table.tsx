@@ -40,7 +40,7 @@ export function TH({ className, ...props }: ComponentPropsWithoutRef<'th'>) {
   return (
     <th
       className={cn(
-        'h-11 whitespace-nowrap px-4 text-left align-middle text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-text-muted',
+        'h-11 whitespace-nowrap px-4 text-left align-middle text-xs font-medium text-text-muted',
         className,
       )}
       {...props}

@@ -27,7 +27,7 @@ export function InboxRoute() {
 
   const column = (title: string, list: InboxItemResponse[], empty: string, kind: 'unread' | 'read') => (
     <section aria-label={title} className="space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-muted">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-text">
         {kind === 'unread' ? <Bell className="size-4" aria-hidden /> : <MailOpen className="size-4" aria-hidden />}
         {title}
         <span className="rounded-full bg-surface-raised px-2 text-xs text-text">{list.length}</span>

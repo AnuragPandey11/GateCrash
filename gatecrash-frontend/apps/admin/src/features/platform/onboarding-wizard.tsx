@@ -551,7 +551,7 @@ function StructureStep({
   return (
     <div key="structure" className="space-y-4 animate-enter">
       <div className="rounded-[14px] border border-border/80 bg-surface-raised/50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">{t('onboarding.structure.example')}</p>
+        <p className="text-xs font-semibold text-text-muted">{t('onboarding.structure.example')}</p>
         <p className="mt-1.5 text-sm font-semibold text-text">
           {levels.map((l) => `${l.singular || '…'} ${SAMPLE[l.kind]}`).join('  ›  ')}
         </p>
@@ -568,7 +568,7 @@ function StructureStep({
             style={{ marginLeft: `${Math.min(i, 3) * 0.75}rem` }}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-accent">
+              <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
                 {t(`onboarding.kind.${level.kind}.title`)}
               </span>
               <span className="hidden text-xs text-text-muted sm:inline">{t(`onboarding.kind.${level.kind}.hint`)}</span>
@@ -671,7 +671,7 @@ function ReviewRow({ label, onEdit, children }: { label: string; onEdit: () => v
   return (
     <div className="flex items-start justify-between gap-3 rounded-[12px] border border-border/80 p-4">
       <div className="min-w-0 space-y-1">
-        <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-text-muted">{label}</p>
+        <p className="text-xs font-medium text-text-muted">{label}</p>
         <div className="text-sm text-text">{children}</div>
       </div>
       <Button variant="ghost" size="sm" onClick={onEdit}>

@@ -119,7 +119,7 @@ export function ChangePasswordRoute() {
       <div className="w-full max-w-md space-y-6 animate-enter [animation-delay:80ms]">
         <form
           onSubmit={onSubmit}
-          className="relative space-y-5 rounded-3xl border border-border bg-surface p-8 shadow-overlay"
+          className="relative space-y-5 rounded-lg border border-border bg-surface p-8 shadow-overlay"
           noValidate
         >
           <div className="space-y-1.5">

@@ -37,8 +37,7 @@ export const DialogContent = forwardRef<
         // its own, keeping the title and the action buttons pinned. Dialogs that do not use
         // DialogBody still scroll as a whole here, so none of them can trap their own footer.
         'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg',
-        // Oakshade's large-panel radius (rounded-3xl) — a dialog is a panel, not a card.
-        '-translate-x-1/2 -translate-y-1/2 flex-col gap-5 overflow-y-auto rounded-3xl border',
+        '-translate-x-1/2 -translate-y-1/2 flex-col gap-5 overflow-y-auto rounded-lg border',
         'border-border bg-surface p-7 shadow-overlay data-[state=open]:animate-scale-in',
         className,
       )}

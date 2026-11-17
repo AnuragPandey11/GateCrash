@@ -124,7 +124,7 @@ function CredentialRow({ label, value }: { label: string; value: string }) {
 
   return (
     <div className="rounded-md border border-border bg-surface-raised p-3">
-      <p className="text-xs uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="text-xs text-text-muted">{label}</p>
       <div className="flex items-center justify-between gap-2">
         <code className="font-credential select-all break-all text-lg text-text">{value}</code>
         <Button variant="ghost" size="icon" onClick={() => void copy()} aria-label={t('common.copy')}>

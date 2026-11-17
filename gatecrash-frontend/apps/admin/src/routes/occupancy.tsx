@@ -88,22 +88,17 @@ function StatTile({
   progress?: number;
 }) {
   return (
-    <Card className="lift relative overflow-hidden">
-      <div className="pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-accent/10 blur-2xl" />
-      <CardContent className="relative space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-text-muted">
-            {label}
-          </p>
-          <span className="flex size-9 items-center justify-center rounded-full border border-accent/30 bg-accent-soft text-accent">
-            <Icon className="size-4" aria-hidden />
-          </span>
-        </div>
-        <p className="font-display text-[2.5rem] leading-none tabular-nums text-text">{value}</p>
+    <Card>
+      <CardContent className="space-y-3">
+        <p className="flex items-center gap-1.5 text-sm text-text-muted">
+          <Icon className="size-4" aria-hidden />
+          {label}
+        </p>
+        <p className="font-display text-[2rem] leading-none tabular-nums text-text">{value}</p>
         {progress !== undefined ? (
           <div className="h-1 overflow-hidden rounded-full bg-surface-raised">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-accent/70 to-accent transition-[width] duration-1000 ease-out-expo"
+              className="h-full rounded-full bg-text transition-[width] duration-700 ease-out-expo"
               style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }}
             />
           </div>

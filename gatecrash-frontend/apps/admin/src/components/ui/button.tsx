@@ -11,22 +11,18 @@ import { cn } from '@/lib/cn';
  */
 const buttonVariants = cva(
   [
-    // Oakshade's buttons are pills. `gc-btn` carries the arrow nudge (index.css): a trailing
-    // arrow or chevron slides forward on hover, the way every Oakshade call to action does.
-    'gc-btn relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold tracking-[-0.005em]',
-    'transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out-expo',
+    // Oakshade's buttons are pills: flat ink, no glow.
+    'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold',
+    'transition-[background-color,border-color,color,transform] duration-150 ease-out',
     'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   ].join(' '),
   {
     variants: {
       variant: {
-        // The ink pill — Oakshade's `bg-neutral-900 shadow-lg shadow-black/10 hover:bg-neutral-700`.
-        // In dark mode the tokens invert it to a white pill on black.
-        primary: 'bg-primary text-primary-fg shadow-[var(--gc-shadow-cta)] hover:bg-primary/85',
-        accent: 'bg-accent text-accent-fg shadow-[var(--gc-shadow-cta)] hover:bg-accent/85',
-        // Oakshade's secondary: a hairline pill over frosted paper.
-        secondary:
-          'border border-text/15 bg-surface/70 text-text backdrop-blur-sm hover:border-text/30 hover:bg-surface-raised',
+        // In dark mode the tokens invert the ink pill to a white one on black.
+        primary: 'bg-primary text-primary-fg hover:bg-primary/85',
+        accent: 'bg-accent text-accent-fg hover:bg-accent/85',
+        secondary: 'border border-border bg-surface text-text hover:border-text/30 hover:bg-surface-raised',
         ghost: 'text-text-muted hover:bg-surface-raised hover:text-text',
         danger: 'bg-danger text-danger-fg shadow-soft hover:bg-danger/90',
         outline: 'border border-border bg-transparent text-text hover:border-text/35 hover:bg-surface-raised/60',

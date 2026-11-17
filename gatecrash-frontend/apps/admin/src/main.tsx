@@ -5,12 +5,9 @@ import './lib/i18n';
 import { bootstrapSession } from './lib/session';
 import { initTheme } from './lib/theme';
 // Self-hosted type: no request to a font CDN, nothing for a CSP to block, works offline.
-// The Oakshade pairing — see `fontFamily` in the shared Tailwind preset. Manrope stands in for
-// Inter until `@fontsource-variable/inter` is added; then import it here and the stack picks it up.
+// See `fontFamily` in the shared Tailwind preset. Manrope stands in for Inter until
+// `@fontsource-variable/inter` is added; then import it here and the stack picks it up.
 import '@fontsource-variable/manrope';
-// Playfair Display is only ever set in italic, for a single emphasised phrase.
-import '@fontsource/playfair-display/400-italic.css';
-import '@fontsource/playfair-display/500-italic.css';
 import './styles/index.css';
 
 // Before first paint, so there is no flash of the wrong theme.

@@ -97,7 +97,7 @@ export function ReceiptDialog({ bill, onClose }: { bill: Invoice; onClose: () =>
         </DialogHeader>
         <div className="space-y-4">
           <div className="text-center">
-            <p className="text-xs uppercase tracking-[0.16em] text-text-muted">{me?.townshipName}</p>
+            <p className="text-sm text-text-muted">{me?.townshipName}</p>
             <p className="font-display text-4xl text-text">{formatPaise(bill.amountPaise)}</p>
             <Badge tone="success" className="mt-2">
               {t('portal.bills.paid')}

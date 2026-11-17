@@ -197,25 +197,13 @@ export const en = {
   login: {
     eyebrow: 'Welcome back',
     heroEyebrow: 'Township management, refined',
-    // `<em>` is set in the Oakshade serif italic — one phrase per headline, never more.
-    heroTitle: 'Every gate, every resident, <em>one quiet command centre.</em>',
+    heroTitle: 'Every gate, every resident, one quiet command centre.',
     heroBody:
       'Approve visitors in real time, reach exactly the homes you mean to, and keep every community you manage in perfect order.',
     heroPoint1: 'Real-time visitor approvals at every gate',
     heroPoint2: 'Notifications targeted down to a single flat',
     heroPoint3: 'Any project shape — towers, villas, plots',
     heroFooter: 'Secured with per-township isolation and a complete audit trail.',
-    // The slow marquee along the foot of the sign-in panel.
-    capabilities: [
-      'Visitor approvals',
-      'Pre-approved passes',
-      'Live gate roll',
-      'Targeted notices',
-      'Community feed',
-      'Amenity booking',
-      'Move-ins & move-outs',
-      'Complete audit trail',
-    ],
     title: 'Sign in',
     subtitle: 'Accounts are issued by your township administrator.',
     townshipCode: 'Township code',

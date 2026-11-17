@@ -6,7 +6,7 @@ export function NotFoundRoute() {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-3 p-16 text-center animate-enter">
-      <p className="serif-accent text-[6rem] leading-none text-text">404</p>
+      <p className="font-display text-[4.5rem] leading-none text-text-muted/50">404</p>
       <h1 className="font-display text-2xl text-text">{t('errors.notFound.title')}</h1>
       <p className="max-w-sm text-sm text-text-muted">{t('errors.notFound.body')}</p>
       <Button asChild variant="secondary">

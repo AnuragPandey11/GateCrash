@@ -137,7 +137,7 @@ export function PropertyPicker({
               className="flex min-w-[13rem] flex-1 flex-col rounded-md border border-border"
             >
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                <p className="text-xs font-semibold text-text-muted">
                   {nom.plural(column.depth)}
                 </p>
                 {column.depth > 0 && column.parentId ? (

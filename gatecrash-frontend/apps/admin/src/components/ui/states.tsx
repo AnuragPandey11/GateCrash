@@ -16,11 +16,8 @@ export function LoadingState({ label }: { label?: string }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center gap-4 p-12 text-sm text-text-muted animate-fade-in">
-      <span className="relative flex size-10 items-center justify-center">
-        <span className="absolute inset-0 rounded-full border border-border" />
-        <Loader2 className="size-5 animate-spin text-text" aria-hidden />
-      </span>
-      <span className="text-xs uppercase tracking-[0.25em]">{label ?? t('common.loading')}</span>
+      <Loader2 className="size-5 animate-spin" aria-hidden />
+      <span>{label ?? t('common.loading')}</span>
     </div>
   );
 }
@@ -58,11 +55,9 @@ export function EmptyState({ icon: Icon, title, description, action, className }
   return (
     <div className={cn('flex flex-col items-center gap-2 p-14 text-center animate-enter', className)}>
       {Icon ? (
-        <span className="icon-tile mb-3 size-12">
-          <Icon className="size-5" aria-hidden />
-        </span>
+        <Icon className="mb-2 size-6 text-text-muted" aria-hidden />
       ) : null}
-      <p className="font-display text-lg text-text">{title}</p>
+      <p className="text-base font-semibold text-text">{title}</p>
       {description ? <p className="max-w-sm text-sm text-text-muted">{description}</p> : null}
       {action ? <div className="pt-2">{action}</div> : null}
     </div>
