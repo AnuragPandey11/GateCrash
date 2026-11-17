@@ -11,32 +11,32 @@ import { cn } from '@/lib/cn';
  */
 const buttonVariants = cva(
   [
-    'relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[10px] text-sm font-semibold tracking-[0.005em]',
-    'transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out-expo',
+    // Oakshade's buttons are pills. `gc-btn` carries the arrow nudge (index.css): a trailing
+    // arrow or chevron slides forward on hover, the way every Oakshade call to action does.
+    'gc-btn relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold tracking-[-0.005em]',
+    'transition-[background-color,border-color,color,box-shadow,transform] duration-300 ease-out-expo',
     'active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   ].join(' '),
   {
     variants: {
       variant: {
-        // A faint top highlight and a soft shadow give the primary action weight without a
-        // gradient that would date the product.
-        primary:
-          'bg-primary text-primary-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.12),var(--gc-shadow-soft)] hover:bg-primary/90 hover:shadow-raised',
-        accent:
-          'bg-accent text-accent-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.25),var(--gc-shadow-soft)] hover:bg-accent/90 hover:shadow-raised',
+        // The ink pill — Oakshade's `bg-neutral-900 shadow-lg shadow-black/10 hover:bg-neutral-700`.
+        // In dark mode the tokens invert it to a white pill on black.
+        primary: 'bg-primary text-primary-fg shadow-[var(--gc-shadow-cta)] hover:bg-primary/85',
+        accent: 'bg-accent text-accent-fg shadow-[var(--gc-shadow-cta)] hover:bg-accent/85',
+        // Oakshade's secondary: a hairline pill over frosted paper.
         secondary:
-          'border border-border bg-surface text-text shadow-soft hover:border-accent/50 hover:bg-surface-raised',
+          'border border-text/15 bg-surface/70 text-text backdrop-blur-sm hover:border-text/30 hover:bg-surface-raised',
         ghost: 'text-text-muted hover:bg-surface-raised hover:text-text',
-        danger:
-          'bg-danger text-danger-fg shadow-[inset_0_1px_0_hsl(0_0%_100%/0.12),var(--gc-shadow-soft)] hover:bg-danger/90',
-        outline: 'border border-border bg-transparent text-text hover:border-accent/60 hover:bg-accent/5',
-        link: 'text-primary underline-offset-4 hover:underline active:scale-100',
+        danger: 'bg-danger text-danger-fg shadow-soft hover:bg-danger/90',
+        outline: 'border border-border bg-transparent text-text hover:border-text/35 hover:bg-surface-raised/60',
+        link: 'text-text underline decoration-text/25 underline-offset-4 hover:decoration-text active:scale-100',
       },
       size: {
         // 48px minimum touch target on the two sizes a finger is likely to meet (§9.7).
-        sm: 'h-9 px-3.5 text-xs',
-        md: 'h-10 px-4',
-        lg: 'h-12 px-6 text-base',
+        sm: 'h-9 px-4 text-xs',
+        md: 'h-10 px-5',
+        lg: 'h-12 px-7',
         icon: 'h-10 w-10',
       },
     },

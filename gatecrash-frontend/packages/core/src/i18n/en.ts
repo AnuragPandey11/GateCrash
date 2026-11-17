@@ -189,16 +189,33 @@ export const en = {
     removeAdminConfirmBody:
       'Their account is deactivated, not deleted — their name still has to resolve on every visit they approved.',
   },
+  brand: {
+    endorsement: 'An Oakshade AI company',
+    // The short form, for the sidebar lockup where the full line does not fit.
+    byline: 'by Oakshade AI',
+  },
   login: {
     eyebrow: 'Welcome back',
     heroEyebrow: 'Township management, refined',
-    heroTitle: 'Every gate, every resident, one quiet command centre.',
+    // `<em>` is set in the Oakshade serif italic — one phrase per headline, never more.
+    heroTitle: 'Every gate, every resident, <em>one quiet command centre.</em>',
     heroBody:
       'Approve visitors in real time, reach exactly the homes you mean to, and keep every community you manage in perfect order.',
     heroPoint1: 'Real-time visitor approvals at every gate',
     heroPoint2: 'Notifications targeted down to a single flat',
     heroPoint3: 'Any project shape — towers, villas, plots',
     heroFooter: 'Secured with per-township isolation and a complete audit trail.',
+    // The slow marquee along the foot of the sign-in panel.
+    capabilities: [
+      'Visitor approvals',
+      'Pre-approved passes',
+      'Live gate roll',
+      'Targeted notices',
+      'Community feed',
+      'Amenity booking',
+      'Move-ins & move-outs',
+      'Complete audit trail',
+    ],
     title: 'Sign in',
     subtitle: 'Accounts are issued by your township administrator.',
     townshipCode: 'Township code',

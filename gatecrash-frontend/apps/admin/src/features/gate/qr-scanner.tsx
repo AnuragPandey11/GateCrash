@@ -112,7 +112,7 @@ export function QrScanner({ onToken }: { onToken: (token: string) => void }) {
 
   return (
     <div className="space-y-3">
-      <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-border bg-[hsl(230_20%_8%)]">
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-border bg-scrim">
         {mode === 'camera' ? (
           <>
             <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />

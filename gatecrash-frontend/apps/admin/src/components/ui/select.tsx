@@ -14,7 +14,7 @@ export const SelectTrigger = forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-10 w-full items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm text-text shadow-[inset_0_1px_2px_hsl(224_40%_12%/0.04)] transition-[border-color,box-shadow] duration-200 hover:border-text-muted/40 focus-visible:border-accent focus-visible:ring-4 focus-visible:ring-accent/15 focus-visible:ring-offset-0 data-[state=open]:border-accent disabled:cursor-not-allowed disabled:opacity-60 [&>span]:truncate',
+      'flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-text shadow-[inset_0_1px_2px_hsl(0_0%_0%/0.03)] transition-[border-color,box-shadow] duration-200 hover:border-text-muted/40 focus-visible:border-accent focus-visible:ring-4 focus-visible:ring-accent/15 focus-visible:ring-offset-0 data-[state=open]:border-accent disabled:cursor-not-allowed disabled:opacity-60 [&>span]:truncate',
       className,
     )}
     {...props}
@@ -39,7 +39,7 @@ export const SelectContent = forwardRef<
       // (or 20rem), with a visible scrollbar and arrow buttons at either end, so a long list —
       // time slots, units, gates — reads as "scroll for more" instead of stopping at the edge.
       className={cn(
-        'relative z-50 flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] flex-col overflow-hidden rounded-[12px] border border-border/80 bg-surface shadow-overlay data-[state=open]:animate-pop-in',
+        'relative z-50 flex max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[8rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-overlay data-[state=open]:animate-pop-in',
         position === 'popper' && 'w-[var(--radix-select-trigger-width)] translate-y-1',
         className,
       )}
@@ -76,7 +76,7 @@ export const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-[8px] py-2 pl-8 pr-2 text-sm text-text outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-accent-soft data-[state=checked]:font-semibold data-[disabled]:opacity-50',
+      'relative flex w-full cursor-default select-none items-center rounded-[10px] py-2 pl-8 pr-2 text-sm text-text outline-none transition-colors data-[disabled]:pointer-events-none data-[highlighted]:bg-accent-soft data-[state=checked]:font-semibold data-[disabled]:opacity-50',
       className,
     )}
     {...props}

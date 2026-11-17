@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 import { signOut, useSessionStore } from '@/lib/session';
+import { BrandTile, OakshadeMark } from './brand';
 import { ConnectionPill } from './connection-pill';
 import { navFor, type NavItem, type NavSectionDef } from './nav-config';
 import { NotificationBell } from './notification-bell';
@@ -16,7 +17,8 @@ import { Button } from './ui/button';
 /**
  * The dashboard shell — FRONTEND.md §8.1.
  *
- * A plain sidebar on the same surface as the cards — it organises, it does not decorate. It
+ * A plain sidebar on the same surface as the cards — it organises, it does not decorate; the one
+ * strong mark in it is the active screen, an ink pill in Oakshade's manner. It
  * collapses to an icon rail (remembered per browser) for anyone who wants the width back for the
  * visitor log; collapsed, each item keeps its name for screen readers and shows it as a tooltip.
  * The top bar is translucent and sticky so the live-connection pill is always in view. Content is
@@ -112,7 +114,7 @@ export function AppShell() {
               <Menu />
             </Button>
             <div className="flex min-w-0 items-center gap-2.5 md:hidden">
-              <Monogram size="sm" />
+              <BrandTile size="sm" />
               <span className="truncate font-display text-lg text-text">{t('common.appName')}</span>
             </div>
             <p className="hidden text-sm text-text-muted md:block">
@@ -140,7 +142,7 @@ export function AppShell() {
               unusable one-handed; a drawer shows every screen with its full name. */}
           <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
             <DialogPrimitive.Portal>
-              <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[hsl(230_30%_6%/0.5)] backdrop-blur-sm data-[state=open]:animate-fade-in md:hidden" />
+              <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-sm data-[state=open]:animate-fade-in md:hidden" />
               <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-[17.5rem] max-w-[85vw] flex-col border-r border-border bg-surface shadow-overlay data-[state=open]:animate-drawer-left md:hidden">
                 <DialogPrimitive.Title className="sr-only">{t('nav.primary')}</DialogPrimitive.Title>
                 <div className="flex items-center justify-between pr-3">
@@ -197,7 +199,7 @@ function RailTooltip({
         <Tooltip.Content
           side="right"
           sideOffset={10}
-          className="z-50 rounded-[8px] bg-text px-2.5 py-1.5 text-xs font-medium text-text-inverse shadow-raised animate-pop-in"
+          className="z-50 rounded-full bg-text px-3 py-1.5 text-xs font-semibold text-text-inverse shadow-raised animate-pop-in"
         >
           {label}
         </Tooltip.Content>
@@ -206,35 +208,26 @@ function RailTooltip({
   );
 }
 
-function Monogram({ size = 'md' }: { size?: 'sm' | 'md' }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'flex shrink-0 items-center justify-center rounded-[8px] bg-primary font-display text-primary-fg',
-        size === 'sm' ? 'size-7 text-sm' : 'size-8 text-base',
-      )}
-    >
-      G
-    </span>
-  );
-}
-
 function Brand({ collapsed }: { collapsed: boolean }) {
   const { t } = useTranslation();
   return (
     <div
       className={cn(
-        'flex h-16 shrink-0 items-center gap-2.5 border-b border-border',
+        'flex h-16 shrink-0 items-center gap-3 border-b border-border',
         // Collapsed, the mark is centred on the rail — the same axis as the nav icons below it.
         collapsed ? 'justify-center px-0' : 'px-5',
       )}
     >
-      <Monogram />
-      <span
-        className={collapsed ? 'sr-only' : 'whitespace-nowrap text-[0.9375rem] font-semibold text-text'}
-      >
-        {t('common.appName')}
+      <BrandTile />
+      <span className={collapsed ? 'sr-only' : 'min-w-0 leading-none'}>
+        <span className="block whitespace-nowrap font-display text-[1.0625rem] text-text">
+          {t('common.appName')}
+        </span>
+        {/* The endorsement: GateCrash is an Oakshade AI product. */}
+        <span className="mt-1.5 flex items-center gap-1.5 whitespace-nowrap text-[0.5625rem] font-semibold uppercase tracking-[0.22em] text-text-muted">
+          <OakshadeMark className="size-3" />
+          {t('brand.byline')}
+        </span>
       </span>
     </div>
   );
@@ -260,7 +253,7 @@ function NavSection({
         // The section word does not fit a rail; a hairline keeps the grouping visible.
         <div className="mx-2 mb-2 h-px bg-border" aria-hidden />
       ) : (
-        <p className="whitespace-nowrap px-3 pb-1.5 text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-text-muted">
+        <p className="whitespace-nowrap px-3 pb-2 text-[0.625rem] font-semibold uppercase tracking-[0.25em] text-text-muted/80">
           {label}
         </p>
       )}
@@ -274,12 +267,13 @@ function NavSection({
           <NavLink
             to={to}
             className={cn(
-              'flex items-center gap-3 rounded-[8px] text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-full text-sm font-medium transition-[background-color,color,box-shadow] duration-300 ease-out-expo',
               large ? 'min-h-11 py-2.5' : 'py-2',
-              collapsed ? 'justify-center px-0' : 'px-3',
+              collapsed ? 'mx-auto size-10 justify-center px-0' : 'px-3.5',
+              // The active screen is the one ink pill in the sidebar.
               isActive
-                ? 'bg-surface-raised text-text'
-                : 'text-text-muted hover:bg-surface-raised/70 hover:text-text',
+                ? 'bg-primary text-primary-fg shadow-[var(--gc-shadow-cta)]'
+                : 'text-text-muted hover:bg-surface-raised hover:text-text',
             )}
           >
             <Icon className="size-4 shrink-0" aria-hidden />
@@ -307,7 +301,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
     return (
       <div className="flex flex-col items-center gap-2 border-t border-border py-3">
         <RailTooltip label={me?.fullName ?? ''} enabled>
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-raised text-xs font-semibold text-text-muted">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-text">
             {initials(me?.fullName)}
           </span>
         </RailTooltip>
@@ -317,7 +311,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
   }
   return (
     <div className="flex items-center gap-3 border-t border-border px-4 py-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-raised text-xs font-semibold text-text-muted">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-text">
         {initials(me?.fullName)}
       </span>
       <div className="min-w-0 flex-1 leading-tight">
@@ -368,11 +362,11 @@ function ActingTownship({ townshipId, block = false }: { townshipId: string | nu
         'h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
         block ? 'flex w-full justify-center' : 'hidden sm:flex',
         townshipId
-          ? 'border-accent/40 bg-accent-soft text-text hover:border-accent'
+          ? 'border-text/15 bg-surface text-text hover:border-text/40'
           : 'border-warning/40 bg-warning/10 text-warning',
       )}
     >
-      <Globe className={cn('size-3.5', townshipId ? 'text-accent' : '')} aria-hidden />
+      <Globe className="size-3.5" aria-hidden />
       {townshipId ? t('townships.acting') : t('townships.actingNone')}
     </NavLink>
   );
@@ -388,21 +382,28 @@ export function PageHeader({
   title: string;
   description?: string;
   actions?: React.ReactNode;
-  /** Small accent caps above the title — the section a screen belongs to. */
+  /** Small wide-tracked caps above the title — the section a screen belongs to. */
   eyebrow?: string;
 }) {
+  // Oakshade's section opening: wide-tracked grey caps, then a bold, tight title that rises out
+  // of its own mask, then a hairline that draws itself across.
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div className="space-y-2">
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <h1 className="font-display text-[1.875rem] leading-[1.15] text-text md:text-[2.25rem]">
-          {title}
-        </h1>
-        {description ? (
-          <p className="max-w-2xl text-[0.9375rem] text-text-muted">{description}</p>
-        ) : null}
+    <div className="mb-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2.5">
+          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+          <h1 className="font-display text-[1.875rem] leading-[1.1] text-text md:text-[2.5rem]">
+            <span className="reveal-line">
+              <span>{title}</span>
+            </span>
+          </h1>
+          {description ? (
+            <p className="max-w-2xl text-[0.9375rem] leading-relaxed text-text-muted">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      <div className="rule-draw mt-6" aria-hidden />
     </div>
   );
 }

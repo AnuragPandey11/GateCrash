@@ -32,7 +32,7 @@ export function VisitDetailDrawer({
   return (
     <Dialog.Root open={Boolean(visitId)} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[hsl(226_40%_6%/0.45)] backdrop-blur-sm data-[state=open]:animate-fade-in" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-scrim/45 backdrop-blur-sm data-[state=open]:animate-fade-in" />
         <Dialog.Content className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-overlay data-[state=open]:animate-drawer-in">
           <div className="flex items-center justify-between border-b border-border px-6 py-5">
             <Dialog.Title className="font-display text-xl text-text">{t('visits.detail.title')}</Dialog.Title>

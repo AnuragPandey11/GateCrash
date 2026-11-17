@@ -17,10 +17,10 @@ export function LoadingState({ label }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 p-12 text-sm text-text-muted animate-fade-in">
       <span className="relative flex size-10 items-center justify-center">
-        <span className="absolute inset-0 rounded-full border border-accent/20" />
-        <Loader2 className="size-5 animate-spin text-accent" aria-hidden />
+        <span className="absolute inset-0 rounded-full border border-border" />
+        <Loader2 className="size-5 animate-spin text-text" aria-hidden />
       </span>
-      <span className="tracking-wide">{label ?? t('common.loading')}</span>
+      <span className="text-xs uppercase tracking-[0.25em]">{label ?? t('common.loading')}</span>
     </div>
   );
 }
@@ -58,8 +58,8 @@ export function EmptyState({ icon: Icon, title, description, action, className }
   return (
     <div className={cn('flex flex-col items-center gap-2 p-14 text-center animate-enter', className)}>
       {Icon ? (
-        <span className="mb-2 flex size-14 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-accent shadow-soft">
-          <Icon className="size-6" aria-hidden />
+        <span className="icon-tile mb-3 size-12">
+          <Icon className="size-5" aria-hidden />
         </span>
       ) : null}
       <p className="font-display text-lg text-text">{title}</p>

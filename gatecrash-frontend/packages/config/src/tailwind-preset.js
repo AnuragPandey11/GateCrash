@@ -9,8 +9,13 @@
 /** @param {string} v */
 const token = (v) => `hsl(var(${v}) / <alpha-value>)`;
 
-/** The one easing curve the product moves on: quick to start, long soft landing. */
+/**
+ * The two curves the product moves on, both lifted from oakshade-ai.com:
+ * EASE_OUT — quick to start, long soft landing — for anything arriving;
+ * EASE_IN_OUT — a deliberate, symmetric sweep — for lines drawing and underlines growing.
+ */
 const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const EASE_IN_OUT = 'cubic-bezier(0.76, 0, 0.24, 1)';
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -25,6 +30,7 @@ export default {
         },
         border: token('--gc-border'),
         ring: token('--gc-ring'),
+        scrim: token('--gc-scrim'),
         text: {
           DEFAULT: token('--gc-text'),
           muted: token('--gc-text-muted'),
@@ -53,12 +59,15 @@ export default {
         pending: { DEFAULT: token('--gc-pending'), fg: token('--gc-pending-fg') },
       },
       fontFamily: {
-        // One plain, humanist sans for everything: Source Sans 3. It reads like a well-made
-        // product rather than a template, holds up at small sizes, and has true tabular figures.
-        // Headings use the same family at a heavier weight — no decorative display face.
+        // Oakshade's pairing: a neo-grotesque sans set bold and tight for everything, and a
+        // Playfair Display italic used sparingly — a single phrase — for emphasis.
+        //
+        // The sans is Inter, self-hosted (no font CDN: the CSP is `default-src 'self'`). Until
+        // `@fontsource-variable/inter` is installed, Manrope — already a dependency, same
+        // proportions and x-height — stands in, so the stack degrades to it rather than to the OS.
         sans: [
-          '"Source Sans 3 Variable"',
-          '"Source Sans 3"',
+          '"Inter Variable"',
+          '"Manrope Variable"',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
@@ -66,7 +75,8 @@ export default {
           'Roboto',
           'sans-serif',
         ],
-        display: ['"Source Sans 3 Variable"', '"Source Sans 3"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Inter Variable"', '"Manrope Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['"Playfair Display"', 'ui-serif', 'Georgia', 'serif'],
       },
       borderRadius: {
         sm: 'var(--gc-radius-sm)',
@@ -79,25 +89,41 @@ export default {
         overlay: 'var(--gc-shadow-overlay)',
       },
       fontSize: {
-        // Type scale 13/15/16/20/24/32/48 (§10.1). The two small steps are a pixel larger than the
-        // original 12/14 because Source Sans has a smaller x-height than the face it replaced.
-        xs: ['0.8125rem', { lineHeight: '1.125rem' }],
-        sm: ['0.9375rem', { lineHeight: '1.4rem' }],
+        // Type scale 12/14/16/20/24/32/48 (§10.1). Larger steps tighten, as Oakshade's
+        // `tracking-tight` headings do.
+        xs: ['0.75rem', { lineHeight: '1rem' }],
+        sm: ['0.875rem', { lineHeight: '1.3rem' }],
         base: ['1rem', { lineHeight: '1.5rem' }],
-        lg: ['1.25rem', { lineHeight: '1.75rem' }],
-        xl: ['1.5rem', { lineHeight: '2rem' }],
-        '2xl': ['2rem', { lineHeight: '2.5rem', letterSpacing: '-0.01em' }],
-        '3xl': ['3rem', { lineHeight: '3.25rem', letterSpacing: '-0.015em' }],
+        lg: ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.01em' }],
+        xl: ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.015em' }],
+        '2xl': ['2rem', { lineHeight: '2.4rem', letterSpacing: '-0.025em' }],
+        '3xl': ['3rem', { lineHeight: '3.1rem', letterSpacing: '-0.03em' }],
       },
       transitionTimingFunction: {
         'out-expo': EASE_OUT,
+        'in-out-quart': EASE_IN_OUT,
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
         'fade-out': { from: { opacity: '1' }, to: { opacity: '0' } },
+        // Oakshade's scroll-reveal: `initial: { opacity: 0, y: 16 }`.
         enter: {
-          from: { opacity: '0', transform: 'translateY(8px)' },
+          from: { opacity: '0', transform: 'translateY(16px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        // A line of type rising out of a mask (`initial: { y: '110%' }`). Wrap in overflow-hidden.
+        'reveal-up': {
+          from: { transform: 'translateY(110%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        // A hairline drawing itself from the left (`initial: { scaleX: 0 }`, origin-left).
+        'draw-x': {
+          from: { transform: 'scaleX(0)' },
+          to: { transform: 'scaleX(1)' },
+        },
+        marquee: {
+          from: { transform: 'translateX(0)' },
+          to: { transform: 'translateX(-50%)' },
         },
         'scale-in': {
           from: { opacity: '0', transform: 'translate(-50%, -48%) scale(0.96)' },
@@ -141,7 +167,10 @@ export default {
       animation: {
         'fade-in': `fade-in 200ms ${EASE_OUT}`,
         'fade-out': `fade-out 150ms ease-in`,
-        enter: `enter 420ms ${EASE_OUT} both`,
+        enter: `enter 600ms ${EASE_OUT} both`,
+        'reveal-up': `reveal-up 900ms ${EASE_OUT} both`,
+        'draw-x': `draw-x 1100ms ${EASE_IN_OUT} both`,
+        marquee: 'marquee 45s linear infinite',
         'scale-in': `scale-in 260ms ${EASE_OUT}`,
         'pop-in': `pop-in 180ms ${EASE_OUT}`,
         'slide-in-right': `slide-in-right 360ms ${EASE_OUT}`,

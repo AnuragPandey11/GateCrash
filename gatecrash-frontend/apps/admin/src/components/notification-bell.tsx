@@ -223,7 +223,7 @@ export function NotificationBell() {
 
 function Count({ n }: { n: number }) {
   return (
-    <span className="rounded-full bg-accent px-1.5 text-[0.6875rem] font-bold leading-5 text-white">
+    <span className="rounded-full bg-accent px-1.5 text-[0.6875rem] font-bold leading-5 text-accent-fg">
       {n > 99 ? '99+' : n}
     </span>
   );

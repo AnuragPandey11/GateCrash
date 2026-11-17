@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { homeFor } from '@/components/nav-config';
+import { BrandTile } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -110,15 +111,19 @@ export function ChangePasswordRoute() {
   const submitting = form.formState.isSubmitting;
 
   return (
-    <div className="midnight-panel flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6 animate-enter">
+    <div className="ink-panel flex min-h-screen flex-col items-center justify-center gap-8 p-4">
+      <div className="flex items-center gap-3 text-sidebar-fg animate-enter">
+        <BrandTile inverse />
+        <span className="font-display text-xl">{t('common.appName')}</span>
+      </div>
+      <div className="w-full max-w-md space-y-6 animate-enter [animation-delay:80ms]">
         <form
           onSubmit={onSubmit}
-          className="relative space-y-5 rounded-lg border border-border/80 bg-surface p-8 shadow-overlay before:pointer-events-none before:absolute before:inset-x-10 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/70 before:to-transparent"
+          className="relative space-y-5 rounded-3xl border border-border bg-surface p-8 shadow-overlay"
           noValidate
         >
-          <div className="space-y-1">
-            <h1 className="font-display text-[1.75rem] leading-tight text-text">{t('changePassword.title')}</h1>
+          <div className="space-y-1.5">
+            <h1 className="font-display text-[1.875rem] leading-tight text-text">{t('changePassword.title')}</h1>
             {forced ? (
               <p className="text-sm text-text-muted">{t('changePassword.forcedSubtitle')}</p>
             ) : null}

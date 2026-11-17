@@ -21,7 +21,7 @@ export const DialogContent = forwardRef<
   }
 >(({ className, children, mandatory = false, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[hsl(226_40%_6%/0.55)] backdrop-blur-sm data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in" />
+    <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim/50 backdrop-blur-sm data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in" />
     <DialogPrimitive.Content
       ref={ref}
       onEscapeKeyDown={mandatory ? (e) => e.preventDefault() : undefined}
@@ -37,11 +37,9 @@ export const DialogContent = forwardRef<
         // its own, keeping the title and the action buttons pinned. Dialogs that do not use
         // DialogBody still scroll as a whole here, so none of them can trap their own footer.
         'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg',
-        '-translate-x-1/2 -translate-y-1/2 flex-col gap-5 overflow-y-auto rounded-lg border',
-        'border-border/80 bg-surface p-7 shadow-overlay data-[state=open]:animate-scale-in',
-        // An accent hairline across the top edge: the one flourish every dialog shares.
-        'before:pointer-events-none before:absolute before:inset-x-8 before:top-0 before:h-px',
-        'before:bg-gradient-to-r before:from-transparent before:via-accent/70 before:to-transparent',
+        // Oakshade's large-panel radius (rounded-3xl) — a dialog is a panel, not a card.
+        '-translate-x-1/2 -translate-y-1/2 flex-col gap-5 overflow-y-auto rounded-3xl border',
+        'border-border bg-surface p-7 shadow-overlay data-[state=open]:animate-scale-in',
         className,
       )}
       {...props}
